@@ -173,7 +173,7 @@ class QuadcopterEnv(DirectRLEnv):
             for key in [
                 "lin_vel",
                 "ang_vel",
-                "approaching_to_goal",
+                "arrpoaching_goal",
                 "convergence_to_goal",
                 "yaw",
                 "cmd",
@@ -293,7 +293,7 @@ class QuadcopterEnv(DirectRLEnv):
             "lin_vel": lin_vel * self.cfg.lin_vel_reward_scale * self.step_dt,
             "ang_vel": ang_vel * self.cfg.ang_vel_reward_scale * self.step_dt,
 
-            "approaching_to_goal": approaching * self.cfg.approaching_goal_reward_scale * self.step_dt,
+            "arrpoaching_goal": approaching * self.cfg.approaching_goal_reward_scale * self.step_dt,
             "convergence_to_goal": convergence * self.cfg.convergence_goal_reward_scale * self.step_dt,
 
             "yaw": yaw_w_mapped * self.cfg.yaw_reward_scale * self.step_dt,
