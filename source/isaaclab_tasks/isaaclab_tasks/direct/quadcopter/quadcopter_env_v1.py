@@ -18,7 +18,7 @@ from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import SimulationCfg
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
-from isaaclab.utils.math import subtract_frame_transforms, euler_xyz_from_quat, wrap_to_pi
+from isaaclab.utils.math import subtract_frame_transforms, euler_xyz_from_quat, wrap_to_pi, matrix_from_euler
 
 from matplotlib import pyplot as plt
 from collections import deque
@@ -56,7 +56,15 @@ class QuadcopterEnvCfg(DirectRLEnvCfg):
     episode_length_s = 20.0
     decimation = 2
     action_space = 4
-    observation_space = 12+1+4
+    # observation_space = 12+1+4
+    observation_space = (
+        3 +  # linear velocity
+        3 +  # angular velocity
+        3 +  # relative desired position
+        9 +  # attitude matrix
+        4 +  # last actions
+        1    # absolute height
+    )
     state_space = 0
     debug_vis = True
 
@@ -217,6 +225,14 @@ class QuadcopterEnv(DirectRLEnv):
 
         quat_w = self._robot.data.root_quat_w
         rpy = euler_xyz_from_quat(quat_w)
+        attitude_matrix = matrix_from_euler(
+            torch.stack([
+                torch.zeros_like(rpy[0]), 
+                torch.zeros_like(rpy[1]), 
+                rpy[2]
+            ], dim=-1),
+            convention="XYZ"
+        )
         yaw_w = wrap_to_pi(rpy[2])
 
         delta_yaw = yaw_w - self.last_yaw
@@ -226,14 +242,15 @@ class QuadcopterEnv(DirectRLEnv):
         self.unwrapped_yaw = yaw_w + 2 * np.pi * self.n_laps
         self.last_yaw = yaw_w
 
+    
         obs = torch.cat(
             [
-                self._robot.data.root_com_lin_vel_b,
-                self._robot.data.root_com_ang_vel_b,
-                self._robot.data.projected_gravity_b,
-                desired_pos_b,
-                self.unwrapped_yaw.unsqueeze(1),
-                self.last_actions,
+                self._robot.data.root_link_state_w[:, 2].unsqueeze(1),  # absolute height
+                desired_pos_b,                                          # relative desired position
+                attitude_matrix.view(attitude_matrix.shape[0], -1),           # attitude matrix
+                self._robot.data.root_com_lin_vel_b,                    # linear velocity
+                self._robot.data.root_com_ang_vel_b,                    # angular velocity
+                self.last_actions,                                  # last actions
             ],
             dim=-1,
         )
