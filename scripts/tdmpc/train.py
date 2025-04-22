@@ -54,17 +54,52 @@ from isaaclab.envs import (
 	ManagerBasedRLEnvCfg,
 	multi_agent_to_single_agent,
 )
+from isaaclab.envs.direct_rl_env import DirectRLEnv
 from isaaclab.utils.dict import print_dict
 from isaaclab.utils.io import dump_pickle, dump_yaml
 
 from algorithm.tdmpc import TDMPC
 from algorithm.helper import Episode, ReplayBuffer
+from cfg import parse_cfg
+from omegaconf import OmegaConf, DictConfig
 import logger
 
 import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.utils.hydra import hydra_task_config
 
 torch.backends.cudnn.benchmark = True
+
+
+class EnvWrapper(gym.Env):
+	def __init__(self, env: gym.Env):
+		self.env = env
+		self.t = 0
+
+	def reset(self):
+		obs, info = self.env.reset()
+		self.t = 0
+		return obs.squeeze(0)
+	
+	def step(self, action):
+		self.t += 1
+		action = action.unsqueeze(0)
+		obs, reward, _, done, info = self.env.step(action)
+		return obs.squeeze(0), reward.item(), self.t >= self.max_episode_length, info # type: ignore
+
+	@property
+	def action_space(self):
+		return self.env.action_space
+
+	@property
+	def observation_space(self):
+		return self.env.observation_space
+	
+	@property
+	def max_episode_length(self):
+		return self.env.unwrapped.max_episode_length # type: ignore
+	
+	def __getattr__(self, name):
+		return getattr(self.env, name)
 
 
 def set_seed(seed):
@@ -86,7 +121,7 @@ def evaluate(env, agent, num_episodes, step, env_step, video):
 			video.init(env, enabled=(i==0))
 		while not done:
 			action = agent.plan(obs, eval_mode=True, step=step, t0=t==0)
-			obs, reward, done, _ = env.step(action.cpu().numpy())
+			obs, reward, done, _ = env.step(action)
 			ep_reward += reward
 			if video: 
 				video.record(env)
@@ -98,20 +133,22 @@ def evaluate(env, agent, num_episodes, step, env_step, video):
 
 
 @hydra_task_config(args_cli.task, "tdmpc_cfg_entry_point")
-def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: dict):
+def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: DictConfig):
 	"""Train with TD-MPC agent."""
 	assert torch.cuda.is_available()
 	
 	# Override configurations with non-hydra CLI arguments
 	env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
 	env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
+
+	agent_cfg = OmegaConf.create(agent_cfg)
 	
 	# Set seeds
-	seed = set_seed(args_cli.seed if args_cli.seed is not None else agent_cfg["seed"])
+	seed = set_seed(args_cli.seed if args_cli.seed is not None else agent_cfg.seed)
 	env_cfg.seed = seed
 	
 	# Specify directory for logging experiments
-	log_root_path = os.path.join("logs", "tdmpc", agent_cfg["task"])
+	log_root_path = os.path.join("logs", "tdmpc", agent_cfg.task)
 	log_root_path = os.path.abspath(log_root_path)
 	print(f"[INFO] Logging experiment in directory: {log_root_path}")
 	
@@ -121,10 +158,16 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 	
 	# Create isaac environment
 	env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
-	
-	# Convert to single-agent instance if required
-	if isinstance(env.unwrapped, DirectMARLEnv):
-		env = multi_agent_to_single_agent(env)
+	env = EnvWrapper(env)
+
+	agent_cfg.obs_shape = (int(env_cfg.observation_space), ) # type: ignore
+	agent_cfg.action_shape = (int(env_cfg.action_space), ) # type: ignore
+	agent_cfg.action_dim = int(env_cfg.action_space) # type: ignore
+	print("obs_shape: ", agent_cfg.obs_shape)
+	print("action_shape: ", agent_cfg.action_shape)
+	print("action_dim: ", agent_cfg.action_dim)
+	agent_cfg.device = "cuda"
+	agent_cfg.task_title = agent_cfg.task.replace('-', ' ').title()
 	
 	# Wrap for video recording
 	if args_cli.video:
@@ -144,9 +187,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 	
 	# Dump configurations
 	dump_yaml(os.path.join(work_dir, "params", "env.yaml"), env_cfg)
-	dump_yaml(os.path.join(work_dir, "params", "agent.yaml"), agent_cfg)
-	dump_pickle(os.path.join(work_dir, "params", "env.pkl"), env_cfg)
-	dump_pickle(os.path.join(work_dir, "params", "agent.pkl"), agent_cfg)
+	dump_yaml(os.path.join(work_dir, "params", "agent.yaml"), OmegaConf.to_yaml(agent_cfg))
 	
 	# Run training
 	L = logger.Logger(work_dir, agent_cfg)
@@ -158,7 +199,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 		episode = Episode(agent_cfg, obs)
 		while not episode.done:
 			action = agent.plan(obs, step=step, t0=episode.first)
-			obs, reward, done, _ = env.step(action.cpu().numpy())
+			obs, reward, done, _ = env.step(action) # type: ignore
 			episode += (obs, action, reward, done)
 		assert len(episode) == agent_cfg.episode_length
 		buffer += episode
@@ -196,7 +237,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
 
 if __name__ == '__main__':
+
 	# Run the main function
-	main()
+	main() # type: ignore
 	# Close sim app
 	simulation_app.close()

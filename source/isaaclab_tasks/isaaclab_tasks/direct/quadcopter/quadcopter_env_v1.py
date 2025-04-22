@@ -18,7 +18,7 @@ from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import SimulationCfg
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
-from isaaclab.utils.math import subtract_frame_transforms, euler_xyz_from_quat, wrap_to_pi
+from isaaclab.utils.math import subtract_frame_transforms, euler_xyz_from_quat, wrap_to_pi, matrix_from_euler
 
 from matplotlib import pyplot as plt
 from collections import deque
@@ -56,7 +56,15 @@ class QuadcopterEnvCfg(DirectRLEnvCfg):
     episode_length_s = 20.0
     decimation = 2
     action_space = 4
-    observation_space = 12+1+4
+    # observation_space = 12+1+4
+    observation_space = (
+        3 +  # linear velocity
+        3 +  # angular velocity
+        3 +  # relative desired position
+        9 +  # attitude matrix
+        4 +  # last actions
+        1    # absolute height
+    )
     state_space = 0
     debug_vis = True
 
@@ -108,6 +116,8 @@ class QuadcopterEnvCfg(DirectRLEnvCfg):
     cmd_body_rates_reward_scale = -0.1
     death_cost = -10.0
 
+    is_train = True
+
 
 class QuadcopterEnv(DirectRLEnv):
     cfg: QuadcopterEnvCfg
@@ -131,12 +141,10 @@ class QuadcopterEnv(DirectRLEnv):
         self.prob_change = 0.05
         self.proximity_threshold = 0.1
 
+        self.change_setpoint = self.cfg.is_train
+
         # Get mode
-        if self.num_envs > 10:
-            self.is_train = True
-        else:
-            self.is_train = False
-            self.change_setpoint = True
+        if not self.cfg.is_train:
             if self.change_setpoint:
                 cfg.episode_length_s = 100.0
             else:
@@ -212,11 +220,19 @@ class QuadcopterEnv(DirectRLEnv):
     def _apply_action(self):
         self._robot.set_external_force_and_torque(self._thrust, self._moment, body_ids=self._body_id)
 
-    def _get_observations(self) -> dict:
+    def _get_observations(self):
         desired_pos_b, _ = subtract_frame_transforms(self._robot.data.root_link_state_w[:, :3], self._robot.data.root_link_state_w[:, 3:7], self._desired_pos_w)
 
         quat_w = self._robot.data.root_quat_w
         rpy = euler_xyz_from_quat(quat_w)
+        attitude_matrix = matrix_from_euler(
+            torch.stack([
+                torch.zeros_like(rpy[0]), 
+                torch.zeros_like(rpy[1]), 
+                rpy[2]
+            ], dim=-1),
+            convention="XYZ"
+        )
         yaw_w = wrap_to_pi(rpy[2])
 
         delta_yaw = yaw_w - self.last_yaw
@@ -226,50 +242,51 @@ class QuadcopterEnv(DirectRLEnv):
         self.unwrapped_yaw = yaw_w + 2 * np.pi * self.n_laps
         self.last_yaw = yaw_w
 
+    
         obs = torch.cat(
             [
-                self._robot.data.root_com_lin_vel_b,
-                self._robot.data.root_com_ang_vel_b,
-                self._robot.data.projected_gravity_b,
-                desired_pos_b,
-                self.unwrapped_yaw.unsqueeze(1),
-                self.last_actions,
+                self._robot.data.root_link_state_w[:, 2].unsqueeze(1),  # absolute height
+                desired_pos_b,                                          # relative desired position
+                attitude_matrix.view(attitude_matrix.shape[0], -1),           # attitude matrix
+                self._robot.data.root_com_lin_vel_b,                    # linear velocity
+                self._robot.data.root_com_ang_vel_b,                    # angular velocity
+                self.last_actions,                                  # last actions
             ],
             dim=-1,
         )
-        observations = {"policy": obs}
+        # observations = {"policy": obs}
 
-        if not self.is_train:
-            # RPY plots
-            roll_w = wrap_to_pi(rpy[0])
-            pitch_w = wrap_to_pi(rpy[1])
+        # if not self.cfg.is_train:
+        #     # RPY plots
+        #     roll_w = wrap_to_pi(rpy[0])
+        #     pitch_w = wrap_to_pi(rpy[1])
 
-            self.roll_history.append(roll_w * 180.0 / np.pi)
-            self.pitch_history.append(pitch_w * 180.0 / np.pi)
-            self.yaw_history.append(self.unwrapped_yaw * 180.0 / np.pi)
-            self.actions_history.append(self._actions.squeeze(0).cpu().numpy())
+        #     self.roll_history.append(roll_w * 180.0 / np.pi)
+        #     self.pitch_history.append(pitch_w * 180.0 / np.pi)
+        #     self.yaw_history.append(self.unwrapped_yaw * 180.0 / np.pi)
+        #     self.actions_history.append(self._actions.squeeze(0).cpu().numpy())
 
-            self.n_steps += 1
-            if self.n_steps >= self.max_len_deque:
-                steps = np.arange(self.n_steps - self.max_len_deque, self.n_steps)
-            else:
-                steps = np.arange(self.n_steps)
+        #     self.n_steps += 1
+        #     if self.n_steps >= self.max_len_deque:
+        #         steps = np.arange(self.n_steps - self.max_len_deque, self.n_steps)
+        #     else:
+        #         steps = np.arange(self.n_steps)
 
-            self.roll_line.set_data(steps, self.roll_history)
-            self.pitch_line.set_data(steps, self.pitch_history)
-            self.yaw_line.set_data(steps, self.yaw_history)
+        #     self.roll_line.set_data(steps, self.roll_history)
+        #     self.pitch_line.set_data(steps, self.pitch_history)
+        #     self.yaw_line.set_data(steps, self.yaw_history)
 
-            for i in range(self.cfg.action_space):
-                self.actions_lines[i].set_data(steps, np.array(self.actions_history)[:, i])
+        #     for i in range(self.cfg.action_space):
+        #         self.actions_lines[i].set_data(steps, np.array(self.actions_history)[:, i])
 
-            for ax in self.rpy_axes:
-                ax.relim()
-                ax.autoscale_view()
+        #     for ax in self.rpy_axes:
+        #         ax.relim()
+        #         ax.autoscale_view()
 
-            plt.draw()
-            plt.pause(0.001)
+        #     plt.draw()
+        #     plt.pause(0.001)
 
-        return observations
+        return obs
 
     def _get_rewards(self) -> torch.Tensor:
         lin_vel = torch.sum(torch.square(self._robot.data.root_com_lin_vel_b), dim=1)
@@ -309,14 +326,14 @@ class QuadcopterEnv(DirectRLEnv):
         self.last_actions = self._actions.clone()
         self.last_distance_to_goal = distance_to_goal.clone()
 
-        if True: #self.is_train:
-            if torch.any(new_point):
-                # Update goal position for environments that are close to the goal
-                env_ids = torch.where(close_to_goal)[0]
-                self._desired_pos_w[env_ids, :2] = torch.zeros_like(self._desired_pos_w[env_ids, :2]).uniform_(-2.0, 2.0)
-                self._desired_pos_w[env_ids, :2] += self._terrain.env_origins[env_ids, :2]
-                self._desired_pos_w[env_ids, 2] = torch.zeros_like(self._desired_pos_w[env_ids, 2]).uniform_(0.5, 1.5)
-        elif self.change_setpoint:
+        if torch.any(new_point):
+            # Update goal position for environments that are close to the goal
+            env_ids = torch.where(close_to_goal)[0]
+            self._desired_pos_w[env_ids, :2] = torch.zeros_like(self._desired_pos_w[env_ids, :2]).uniform_(-2.0, 2.0)
+            self._desired_pos_w[env_ids, :2] += self._terrain.env_origins[env_ids, :2]
+            self._desired_pos_w[env_ids, 2] = torch.zeros_like(self._desired_pos_w[env_ids, 2]).uniform_(0.5, 1.5)
+        
+        if self.change_setpoint:
             # Check if drone is within the proximity threshold
             close_to_goal = distance_to_goal < self.proximity_threshold
             
@@ -366,9 +383,9 @@ class QuadcopterEnv(DirectRLEnv):
 
         self._robot.reset(env_ids)
         super()._reset_idx(env_ids)
-        if len(env_ids) == self.num_envs:
-            # Spread out the resets to avoid spikes in training when many environments reset at a similar time
-            self.episode_length_buf = torch.randint_like(self.episode_length_buf, high=int(self.max_episode_length))
+        # if len(env_ids) == self.num_envs:
+        #     # Spread out the resets to avoid spikes in training when many environments reset at a similar time
+        #     self.episode_length_buf = torch.randint_like(self.episode_length_buf, high=int(self.max_episode_length))
 
         self._actions[env_ids] = 0.0
         # Sample new commands

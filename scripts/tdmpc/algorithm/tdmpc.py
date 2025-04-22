@@ -102,7 +102,8 @@ class TDMPC():
 			return torch.empty(self.cfg.action_dim, dtype=torch.float32, device=self.device).uniform_(-1, 1)
 
 		# Sample policy trajectories
-		obs = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
+		# obs = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
+		obs = obs.clone().unsqueeze(0).to(device=self.device, dtype=torch.float32)
 		horizon = int(min(self.cfg.horizon, h.linear_schedule(self.cfg.horizon_schedule, step)))
 		num_pi_trajs = int(self.cfg.mixture_coef * self.cfg.num_samples)
 		if num_pi_trajs > 0:

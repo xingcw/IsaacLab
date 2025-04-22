@@ -162,7 +162,7 @@ class Episode(object):
 		self.device = torch.device(cfg.device)
 		dtype = torch.float32 if cfg.modality == 'state' else torch.uint8
 		self.obs = torch.empty((cfg.episode_length+1, *init_obs.shape), dtype=dtype, device=self.device)
-		self.obs[0] = torch.tensor(init_obs, dtype=dtype, device=self.device)
+		self.obs[0] = init_obs.clone().to(device=self.device, dtype=dtype)
 		self.action = torch.empty((cfg.episode_length, cfg.action_dim), dtype=torch.float32, device=self.device)
 		self.reward = torch.empty((cfg.episode_length,), dtype=torch.float32, device=self.device)
 		self.cumulative_reward = 0
@@ -181,7 +181,7 @@ class Episode(object):
 		return self
 
 	def add(self, obs, action, reward, done):
-		self.obs[self._idx+1] = torch.tensor(obs, dtype=self.obs.dtype, device=self.obs.device)
+		self.obs[self._idx+1] = obs.clone().to(device=self.obs.device, dtype=self.obs.dtype)
 		self.action[self._idx] = action
 		self.reward[self._idx] = reward
 		self.cumulative_reward += reward
