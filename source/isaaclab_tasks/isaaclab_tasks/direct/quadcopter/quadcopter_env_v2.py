@@ -170,7 +170,6 @@ class QuadcopterEnvCfg(DirectRLEnvCfg):
     curriculum_start = 500
     curriculum_end = 4000
     
-    
     # reward scales
     lin_vel_reward_scale = -0.01
     ang_vel_reward_scale = -0.001
@@ -183,6 +182,7 @@ class QuadcopterEnvCfg(DirectRLEnvCfg):
     cmd_body_rates_reward_scale = -0.1
     death_cost = -10.0
 
+
 class QuadcopterEnv(DirectRLEnv):
     cfg: QuadcopterEnvCfg
 
@@ -193,10 +193,7 @@ class QuadcopterEnv(DirectRLEnv):
         self.motor_noise_std = 0.0
 
         # Get train/test mode
-        if self.num_envs > 10:
-            self.is_train = True
-        else:
-            self.is_train = False
+        self.is_train = True
 
         # Initialize tensors
         self._actions = torch.zeros(self.num_envs, self.cfg.action_space, device=self.device)
@@ -264,42 +261,42 @@ class QuadcopterEnv(DirectRLEnv):
             ]
         }
 
-        if not self.is_train:
-            self.change_setpoint = True
-            if self.change_setpoint:
-                cfg.episode_length_s = 20.0
-            else:
-                cfg.episode_length_s = 20.0
-            self.draw_plots = True
-            self.max_len_deque = 100
-            self.roll_history = deque(maxlen=self.max_len_deque)
-            self.pitch_history = deque(maxlen=self.max_len_deque)
-            self.yaw_history = deque(maxlen=self.max_len_deque)
-            self.actions_history = deque(maxlen=self.max_len_deque)
-            self.n_steps = 0
-            self.rpy_fig, self.rpy_axes = plt.subplots(4, 1, figsize=(10, 8))
-            self.roll_line, = self.rpy_axes[0].plot([], [], 'r', label="Roll")
-            self.pitch_line, = self.rpy_axes[1].plot([], [], 'g', label="Pitch")
-            self.yaw_line, = self.rpy_axes[2].plot([], [], 'b', label="Yaw")
-            self.actions_lines = [self.rpy_axes[3].plot([], [], label=f"{legend}")[0] for legend in ["Thrust", "Roll rate", "Pitch rate", "Yaw rate"]]
+        # if not self.is_train:
+        #     self.change_setpoint = True
+        #     if self.change_setpoint:
+        #         cfg.episode_length_s = 20.0
+        #     else:
+        #         cfg.episode_length_s = 20.0
+        #     self.draw_plots = False
+        #     self.max_len_deque = 100
+        #     self.roll_history = deque(maxlen=self.max_len_deque)
+        #     self.pitch_history = deque(maxlen=self.max_len_deque)
+        #     self.yaw_history = deque(maxlen=self.max_len_deque)
+        #     self.actions_history = deque(maxlen=self.max_len_deque)
+        #     self.n_steps = 0
+        #     self.rpy_fig, self.rpy_axes = plt.subplots(4, 1, figsize=(10, 8))
+        #     self.roll_line, = self.rpy_axes[0].plot([], [], 'r', label="Roll")
+        #     self.pitch_line, = self.rpy_axes[1].plot([], [], 'g', label="Pitch")
+        #     self.yaw_line, = self.rpy_axes[2].plot([], [], 'b', label="Yaw")
+        #     self.actions_lines = [self.rpy_axes[3].plot([], [], label=f"{legend}")[0] for legend in ["Thrust", "Roll rate", "Pitch rate", "Yaw rate"]]
 
-            if self.num_envs > 1:
-                self.draw_plots = False
-                plt.close(self.rpy_fig)
+        #     if self.num_envs > 1:
+        #         self.draw_plots = False
+        #         plt.close(self.rpy_fig)
 
-            # Configure subplots
-            for ax, title in zip(self.rpy_axes, ["Roll History", "Pitch History", "Yaw History", "Actions History"]):
-                ax.set_title(title)
-                ax.set_xlabel("Time Step")
-                if any(angle in title for angle in ["Roll", "Pitch", "Yaw"]):
-                    ax.set_ylabel("Angle (°)")
-                elif title == "Actions History":
-                    ax.set_ylabel("Action")
-                ax.legend(loc="upper left")
-                ax.grid(True)
+        #     Configure subplots
+        #     for ax, title in zip(self.rpy_axes, ["Roll History", "Pitch History", "Yaw History", "Actions History"]):
+        #         ax.set_title(title)
+        #         ax.set_xlabel("Time Step")
+        #         if any(angle in title for angle in ["Roll", "Pitch", "Yaw"]):
+        #             ax.set_ylabel("Angle (°)")
+        #         elif title == "Actions History":
+        #             ax.set_ylabel("Action")
+        #         ax.legend(loc="upper left")
+        #         ax.grid(True)
 
-            plt.tight_layout()
-            plt.ion()  # interactive mode
+        #     plt.tight_layout()
+        #     plt.ion()  # interactive mode
 
         # Get specific body indices
         self._body_id = self._robot.find_bodies("body")[0]
@@ -483,7 +480,7 @@ class QuadcopterEnv(DirectRLEnv):
         return reward
     
     # _get_observations is executed after _get_rewards
-    def _get_observations(self) -> dict:
+    def _get_observations(self):
         desired_pos_b, _ = subtract_frame_transforms(self._robot.data.root_link_state_w[:, :3],
                                                      self._robot.data.root_link_state_w[:, 3:7],
                                                      self._desired_pos_w)
@@ -516,38 +513,38 @@ class QuadcopterEnv(DirectRLEnv):
 
         self._previous_action = self._actions.clone()
 
-        if not self.is_train:
-            if self.draw_plots:
-                # RPY plots
-                roll_w = wrap_to_pi(rpy[0])
-                pitch_w = wrap_to_pi(rpy[1])
+        # if not self.is_train:
+        #     if self.draw_plots:
+        #         # RPY plots
+        #         roll_w = wrap_to_pi(rpy[0])
+        #         pitch_w = wrap_to_pi(rpy[1])
 
-                self.roll_history.append(roll_w * 180.0 / np.pi)
-                self.pitch_history.append(pitch_w * 180.0 / np.pi)
-                self.yaw_history.append(self.unwrapped_yaw * 180.0 / np.pi)
-                self.actions_history.append(self._actions.squeeze(0).cpu().numpy())
+        #         self.roll_history.append(roll_w * 180.0 / np.pi)
+        #         self.pitch_history.append(pitch_w * 180.0 / np.pi)
+        #         self.yaw_history.append(self.unwrapped_yaw * 180.0 / np.pi)
+        #         self.actions_history.append(self._actions.squeeze(0).cpu().numpy())
 
-                self.n_steps += 1
-                if self.n_steps >= self.max_len_deque:
-                    steps = np.arange(self.n_steps - self.max_len_deque, self.n_steps)
-                else:
-                    steps = np.arange(self.n_steps)
+        #         self.n_steps += 1
+        #         if self.n_steps >= self.max_len_deque:
+        #             steps = np.arange(self.n_steps - self.max_len_deque, self.n_steps)
+        #         else:
+        #             steps = np.arange(self.n_steps)
 
-                self.roll_line.set_data(steps, self.roll_history)
-                self.pitch_line.set_data(steps, self.pitch_history)
-                self.yaw_line.set_data(steps, self.yaw_history)
+        #         self.roll_line.set_data(steps, self.roll_history)
+        #         self.pitch_line.set_data(steps, self.pitch_history)
+        #         self.yaw_line.set_data(steps, self.yaw_history)
 
-                for i in range(self.cfg.action_space):
-                    self.actions_lines[i].set_data(steps, np.array(self.actions_history)[:, i])
+        #         for i in range(self.cfg.action_space):
+        #             self.actions_lines[i].set_data(steps, np.array(self.actions_history)[:, i])
 
-                for ax in self.rpy_axes:
-                    ax.relim()
-                    ax.autoscale_view()
+        #         for ax in self.rpy_axes:
+        #             ax.relim()
+        #             ax.autoscale_view()
 
-                plt.draw()
-                plt.pause(0.001)
+        #         plt.draw()
+        #         plt.pause(0.001)
 
-        return observations
+        return obs
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
         time_out = self.episode_length_buf >= self.max_episode_length - 1

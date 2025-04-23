@@ -14,20 +14,20 @@ from isaaclab.app import AppLauncher
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Train an RL agent with TD-MPC.")
-parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
-parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
-parser.add_argument("--video_interval", type=int, default=2000, help="Interval between video recordings (in steps).")
+parser.add_argument("--video", action="store_true", default=False, help="Save videos during training.")
 parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
-parser.add_argument("--max_iterations", type=int, default=None, help="RL Policy training iterations.")
+parser.add_argument("--exp_name", type=str, default=None, help="Name of the experiment.")
+parser.add_argument("--use_wandb", action="store_true", default=False, help="Use wandb for logging.")
+parser.add_argument("--save_model", action="store_true", default=False, help="Save model.")
 
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 args_cli, hydra_args = parser.parse_known_args()
 
 # always enable cameras to record video
-if args_cli.video:
+if args_cli.video:	
 	args_cli.enable_cameras = True
 
 # clear out sys.argv for Hydra
@@ -85,21 +85,59 @@ class EnvWrapper(gym.Env):
 		action = action.unsqueeze(0)
 		obs, reward, _, done, info = self.env.step(action)
 		return obs.squeeze(0), reward.item(), self.t >= self.max_episode_length, info # type: ignore
+	
+	def __str__(self):
+		return f"<{type(self).__name__}{self.env}>"
+
+	def __repr__(self):
+		return str(self)
 
 	@property
-	def action_space(self):
+	def cfg(self) -> object:
+		"""Returns the configuration class instance of the environment."""
+		return self.unwrapped.cfg
+
+	@property
+	def render_mode(self) -> str | None:
+		"""Returns the :attr:`Env` :attr:`render_mode`."""
+		return self.env.render_mode
+
+	@property
+	def observation_space(self) -> gym.Space:
+		"""Returns the :attr:`Env` :attr:`observation_space`."""
+		return self.env.observation_space
+
+	@property
+	def action_space(self) -> gym.Space:
+		"""Returns the :attr:`Env` :attr:`action_space`."""
 		return self.env.action_space
 
+	@classmethod
+	def class_name(cls) -> str:
+		"""Returns the class name of the wrapper."""
+		return cls.__name__
+
 	@property
-	def observation_space(self):
-		return self.env.observation_space
+	def unwrapped(self) -> DirectRLEnv:
+		"""Returns the base environment of the wrapper.
+
+		This will be the bare :class:`gymnasium.Env` environment, underneath all layers of wrappers.
+		"""
+		return self.env.unwrapped # type: ignore
+	
+	@property
+	def step_id(self):
+		return self.env.step_id # type: ignore
 	
 	@property
 	def max_episode_length(self):
 		return self.env.unwrapped.max_episode_length # type: ignore
 	
+	def render(self):
+		return self.env.unwrapped.render() # type: ignore
+	
 	def __getattr__(self, name):
-		return getattr(self.env, name)
+		return getattr(self.env.unwrapped, name)
 
 
 def set_seed(seed):
@@ -129,7 +167,7 @@ def evaluate(env, agent, num_episodes, step, env_step, video):
 		episode_rewards.append(ep_reward)
 		if video: 
 			video.save(env_step)
-	return np.nanmean(episode_rewards)
+	return np.nanmean(episode_rewards), np.nanstd(episode_rewards)
 
 
 @hydra_task_config(args_cli.task, "tdmpc_cfg_entry_point")
@@ -146,6 +184,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 	# Set seeds
 	seed = set_seed(args_cli.seed if args_cli.seed is not None else agent_cfg.seed)
 	env_cfg.seed = seed
+	agent_cfg.seed = seed
+
+	# Set experiment name
+	agent_cfg.exp_name = args_cli.exp_name
+	agent_cfg.save_model = args_cli.save_model
 	
 	# Specify directory for logging experiments
 	log_root_path = os.path.join("logs", "tdmpc", agent_cfg.task)
@@ -158,7 +201,6 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 	
 	# Create isaac environment
 	env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
-	env = EnvWrapper(env)
 
 	agent_cfg.obs_shape = (int(env_cfg.observation_space), ) # type: ignore
 	agent_cfg.action_shape = (int(env_cfg.action_space), ) # type: ignore
@@ -168,18 +210,14 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 	print("action_dim: ", agent_cfg.action_dim)
 	agent_cfg.device = "cuda"
 	agent_cfg.task_title = agent_cfg.task.replace('-', ' ').title()
+
+	# setup wandb
+	agent_cfg.use_wandb = args_cli.use_wandb
+	agent_cfg.wandb_project = "isaaclab"
+	agent_cfg.wandb_entity = "chxing-university-of-pennsylvania"
 	
-	# Wrap for video recording
-	if args_cli.video:
-		video_kwargs = {
-			"video_folder": os.path.join(work_dir, "videos", "train"),
-			"step_trigger": lambda step: step % args_cli.video_interval == 0,
-			"video_length": args_cli.video_length,
-			"disable_logger": True,
-		}
-		print("[INFO] Recording videos during training.")
-		print_dict(video_kwargs, nesting=4)
-		env = gym.wrappers.RecordVideo(env, **video_kwargs)
+	# setup video recording
+	agent_cfg.save_video = args_cli.video
 	
 	# Initialize agent and buffer
 	agent = TDMPC(agent_cfg)
@@ -192,6 +230,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 	# Run training
 	L = logger.Logger(work_dir, agent_cfg)
 	episode_idx, start_time = 0, time.time()
+
+	env = EnvWrapper(env)
 	
 	for step in range(0, agent_cfg.train_steps + agent_cfg.episode_length, agent_cfg.episode_length):
 		# Collect trajectory
@@ -226,7 +266,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
 		# Evaluate agent periodically
 		if env_step % agent_cfg.eval_freq == 0:
-			common_metrics['episode_reward'] = evaluate(env, agent, agent_cfg.eval_episodes, step, env_step, L.video)
+			common_metrics['episode_reward'], common_metrics['episode_reward_std'] = \
+				evaluate(env, agent, agent_cfg.eval_episodes, step, env_step, L.video)
 			L.log(common_metrics, category='eval')
 
 	L.finish(agent)

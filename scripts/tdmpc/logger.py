@@ -7,6 +7,7 @@ import torch
 import pandas as pd
 from termcolor import colored
 from omegaconf import OmegaConf
+from torchvision import transforms
 
 
 CONSOLE_FORMAT = [('episode', 'E', 'int'), ('env_step', 'S', 'int'), ('episode_reward', 'R', 'float'), ('total_time', 'T', 'time')]
@@ -52,13 +53,13 @@ def cfg_to_group(cfg, return_list=False):
 
 class VideoRecorder:
 	"""Utility class for logging evaluation videos."""
-	def __init__(self, root_dir, wandb, render_size=384, fps=15):
+	def __init__(self, root_dir, wandb, crop_size=None):
 		self.save_dir = (root_dir / 'eval_video') if root_dir else None
 		self._wandb = wandb
-		self.render_size = render_size
-		self.fps = fps
 		self.frames = []
 		self.enabled = False
+		self.crop_size = crop_size
+		self.center_crop = transforms.CenterCrop(crop_size) if crop_size else None
 
 	def init(self, env, enabled=True):
 		self.frames = []
@@ -67,13 +68,23 @@ class VideoRecorder:
 
 	def record(self, env):
 		if self.enabled:
-			frame = env.render(mode='rgb_array', height=self.render_size, width=self.render_size, camera_id=0)
+			frame = env.render()
 			self.frames.append(frame)
 
 	def save(self, step):
 		if self.enabled:
-			frames = np.stack(self.frames).transpose(0, 3, 1, 2)
-			self._wandb.log({'eval_video': self._wandb.Video(frames, fps=self.fps, format='mp4')}, step=step)
+			frames = np.stack(self.frames)
+			
+			# Apply center crop if needed
+			if self.center_crop and len(frames.shape) == 4:
+				# Convert to PyTorch tensor, apply transform, back to numpy
+				frames_tensor = torch.from_numpy(frames).permute(0, 3, 1, 2)  # NHWC -> NCHW
+				frames_tensor = self.center_crop(frames_tensor)
+				frames = frames_tensor.permute(0, 2, 3, 1).numpy()  # NCHW -> NHWC
+			
+			frames = frames.transpose(0, 3, 1, 2)  # NHWC -> NCHW for wandb.Video
+			print("Uploading video to wandb...")
+			self._wandb.log({'eval_video': self._wandb.Video(frames)}, step=step)
 
 
 class Logger(object):
@@ -98,7 +109,7 @@ class Logger(object):
 				import wandb
 				wandb.init(project=project,
 						entity=entity,
-						name=str(cfg.seed),
+						name=cfg.exp_name,
 						group=self._group,
 						tags=cfg_to_group(cfg, return_list=True) + [f'seed:{cfg.seed}'],
 						dir=self._log_dir,
@@ -119,12 +130,12 @@ class Logger(object):
 			fp = self._model_dir / f'model.pt'
 			torch.save(agent.state_dict(), fp)
 			if self._wandb:
-				artifact = self._wandb.Artifact(self._group+'-'+str(self._seed), type='model')
+				artifact = self._wandb.Artifact(self._group + '-' + self._cfg.exp_name, type='model')
 				artifact.add_file(fp)
 				self._wandb.log_artifact(artifact)
 		if self._wandb:
 			self._wandb.finish()
-		print_run(self._cfg, self._eval[-1][-1])
+		print_run(self._cfg, reward=self._eval[-1][-2])
 
 	def _format(self, key, value, ty):
 		if ty == 'int':
@@ -150,7 +161,7 @@ class Logger(object):
 			for k,v in d.items():
 				self._wandb.log({category + '/' + k: v}, step=d['env_step'])
 		if category == 'eval':
-			keys = ['env_step', 'episode_reward']
-			self._eval.append(np.array([d[keys[0]], d[keys[1]]]))
+			keys = ['env_step', 'episode_reward', 'episode_reward_std']
+			self._eval.append(np.array([d[keys[0]], d[keys[1]], d[keys[2]]]))
 			pd.DataFrame(np.array(self._eval)).to_csv(self._log_dir / 'eval.log', header=keys, index=None)
 		self._print(d, category)
