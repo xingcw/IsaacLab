@@ -107,14 +107,14 @@ class QuadcopterEnvCfg(DirectRLEnvCfg):
     # reward scales
     lin_vel_reward_scale = -0.01
     ang_vel_reward_scale = -0.001
-    approaching_goal_reward_scale = 0.0
-    convergence_goal_reward_scale = 10.0
-    yaw_reward_scale = 5.0
+    approaching_goal_reward_scale = 10.0
+    convergence_goal_reward_scale = 1.0
+    yaw_reward_scale = 1.0
     new_goal_reward_scale = 0.0
 
-    cmd_smoothness_reward_scale = -1
+    cmd_smoothness_reward_scale = -1.0
     cmd_body_rates_reward_scale = -0.1
-    death_cost = -10.0
+    death_cost = -20.0
 
     is_train = True
 
@@ -181,10 +181,11 @@ class QuadcopterEnv(DirectRLEnv):
             for key in [
                 "lin_vel",
                 "ang_vel",
-                "arrpoaching_goal",
-                "convergence_to_goal",
+                "approaching_goal",
+                "convergence_goal",
                 "yaw",
-                "cmd",
+                "cmd_smoothness",
+                "cmd_body_rates",
                 "new_goal",
             ]
         }
@@ -221,7 +222,11 @@ class QuadcopterEnv(DirectRLEnv):
         self._robot.set_external_force_and_torque(self._thrust, self._moment, body_ids=self._body_id)
 
     def _get_observations(self):
-        desired_pos_b, _ = subtract_frame_transforms(self._robot.data.root_link_state_w[:, :3], self._robot.data.root_link_state_w[:, 3:7], self._desired_pos_w)
+        desired_pos_b, _ = subtract_frame_transforms(
+            self._robot.data.root_link_state_w[:, :3], 
+            self._robot.data.root_link_state_w[:, 3:7], 
+            self._desired_pos_w
+        )
 
         quat_w = self._robot.data.root_quat_w
         rpy = euler_xyz_from_quat(quat_w)
@@ -247,14 +252,14 @@ class QuadcopterEnv(DirectRLEnv):
             [
                 self._robot.data.root_link_state_w[:, 2].unsqueeze(1),  # absolute height
                 desired_pos_b,                                          # relative desired position
-                attitude_matrix.view(attitude_matrix.shape[0], -1),           # attitude matrix
+                attitude_matrix.view(attitude_matrix.shape[0], -1),     # attitude matrix
                 self._robot.data.root_com_lin_vel_b,                    # linear velocity
                 self._robot.data.root_com_ang_vel_b,                    # angular velocity
-                self.last_actions,                                  # last actions
+                self.last_actions,                                      # last actions
             ],
             dim=-1,
         )
-        # observations = {"policy": obs}
+        observations = {"policy": obs}
 
         # if not self.cfg.is_train:
         #     # RPY plots
@@ -286,7 +291,7 @@ class QuadcopterEnv(DirectRLEnv):
         #     plt.draw()
         #     plt.pause(0.001)
 
-        return obs
+        return observations
 
     def _get_rewards(self) -> torch.Tensor:
         lin_vel = torch.sum(torch.square(self._robot.data.root_com_lin_vel_b), dim=1)
@@ -310,13 +315,13 @@ class QuadcopterEnv(DirectRLEnv):
             "lin_vel": lin_vel * self.cfg.lin_vel_reward_scale * self.step_dt,
             "ang_vel": ang_vel * self.cfg.ang_vel_reward_scale * self.step_dt,
 
-            "arrpoaching_goal": approaching * self.cfg.approaching_goal_reward_scale * self.step_dt,
-            "convergence_to_goal": convergence * self.cfg.convergence_goal_reward_scale * self.step_dt,
+            "approaching_goal": approaching * self.cfg.approaching_goal_reward_scale * self.step_dt,
+            "convergence_goal": convergence * self.cfg.convergence_goal_reward_scale * self.step_dt,
 
             "yaw": yaw_w_mapped * self.cfg.yaw_reward_scale * self.step_dt,
 
-            "cmd": cmd_smoothness * self.cfg.cmd_smoothness_reward_scale * self.step_dt + \
-                   cmd_body_rates_smoothness * self.cfg.cmd_body_rates_reward_scale * self.step_dt,
+            "cmd_smoothness": cmd_smoothness * self.cfg.cmd_smoothness_reward_scale * self.step_dt,
+            "cmd_body_rates": cmd_body_rates_smoothness * self.cfg.cmd_body_rates_reward_scale * self.step_dt,
             
             "new_goal": new_point * self.cfg.new_goal_reward_scale,
         }

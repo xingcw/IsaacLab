@@ -109,7 +109,7 @@ class Logger(object):
 				import wandb
 				wandb.init(project=project,
 						entity=entity,
-						name=cfg.exp_name,
+						name=cfg.exp_name + f"_{self._log_dir.name}",
 						group=self._group,
 						tags=cfg_to_group(cfg, return_list=True) + [f'seed:{cfg.seed}'],
 						dir=self._log_dir,
@@ -155,7 +155,7 @@ class Logger(object):
 			pieces.append(f'{self._format(disp_k, d.get(k, 0), ty):<26}')
 		print('   '.join(pieces))
 
-	def log(self, d, category='train'):
+	def log(self, d, category='train', agent=None):
 		assert category in {'train', 'eval'}
 		if self._wandb is not None:
 			for k,v in d.items():
@@ -165,3 +165,12 @@ class Logger(object):
 			self._eval.append(np.array([d[keys[0]], d[keys[1]], d[keys[2]]]))
 			pd.DataFrame(np.array(self._eval)).to_csv(self._log_dir / 'eval.log', header=keys, index=None)
 		self._print(d, category)
+
+		if self._save_model and agent is not None:
+			step = d['env_step']
+			fp = self._model_dir / f'model_{step:06d}.pt'
+			torch.save(agent.state_dict(), fp)
+			if self._wandb:
+				artifact = self._wandb.Artifact(self._group + '-' + self._cfg.exp_name, type='model')
+				artifact.add_file(fp)
+				self._wandb.log_artifact(artifact)

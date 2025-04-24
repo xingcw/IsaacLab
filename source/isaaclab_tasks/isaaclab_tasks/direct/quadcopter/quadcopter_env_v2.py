@@ -14,7 +14,7 @@ from isaaclab.assets import Articulation, ArticulationCfg
 from isaaclab.envs import DirectRLEnv, DirectRLEnvCfg
 from isaaclab.envs.ui import BaseEnvWindow
 from isaaclab.markers import VisualizationMarkers
-from isaaclab.markers.visualization_markers import VisualizationMarkersCfg
+# from isaaclab.markers.visualization_markers import VisualizationMarkersCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import SimulationCfg
 from isaaclab.terrains import TerrainImporterCfg
@@ -28,19 +28,20 @@ from collections import deque
 # Pre-defined configs
 ##
 from isaaclab_assets import CRAZYFLIE_CFG  # isort: skip
+from isaaclab.markers import CUBOID_MARKER_CFG  # isort: skip
 
-GOAL_MARKER_CFG = VisualizationMarkersCfg(
-    markers={
-        # "sphere": sim_utils.UsdFileCfg(
-        #     usd_path="/home/lorenzo/Desktop/goal.usdc",
-        #     scale=(0.5, 0.5, 0.5),
-        # ),
-        "sphere": sim_utils.SphereCfg(
-            radius=0.01,
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0)),
-        ),
-    }
-)
+# GOAL_MARKER_CFG = VisualizationMarkersCfg(
+#     markers={
+#         # "sphere": sim_utils.UsdFileCfg(
+#         #     usd_path="/home/lorenzo/Desktop/goal.usdc",
+#         #     scale=(0.5, 0.5, 0.5),
+#         # ),
+#         "sphere": sim_utils.SphereCfg(
+#             radius=0.01,
+#             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0)),
+#         ),
+#     }
+# )
 
 class QuadcopterEnvWindow(BaseEnvWindow):
     """Window manager for the Quadcopter environment."""
@@ -159,28 +160,28 @@ class QuadcopterEnvCfg(DirectRLEnvCfg):
     body_rate_scale_z = 3.0
 
     # Parameters from train.py or play.py
-    use_simple_model = None
+    use_simple_model = False
     thrust_to_weight = 1.9 if use_simple_model else 1.8
     prob_change = 0.5
     proximity_threshold = 0.1
     velocity_threshold = 100.0
     wait_time_s = 0.5
     max_time_no_approach = 6.0
-    max_motor_noise_std = 0.0
-    curriculum_start = 500
+    max_motor_noise_std = 50.0
+    curriculum_start = 1000
     curriculum_end = 4000
     
     # reward scales
     lin_vel_reward_scale = -0.01
-    ang_vel_reward_scale = -0.001
-    approaching_goal_reward_scale = 0.0
-    convergence_goal_reward_scale = 10.0
-    yaw_reward_scale = 5.0
+    ang_vel_reward_scale = -0.01
+    approaching_goal_reward_scale = 100.0
+    convergence_goal_reward_scale = 100.0
+    yaw_reward_scale = 1.0
     new_goal_reward_scale = 0.0
-
-    cmd_smoothness_reward_scale = -1
+    
+    cmd_smoothness_reward_scale = -1.0
     cmd_body_rates_reward_scale = -0.1
-    death_cost = -10.0
+    death_cost = -20.0
 
 
 class QuadcopterEnv(DirectRLEnv):
@@ -261,43 +262,6 @@ class QuadcopterEnv(DirectRLEnv):
             ]
         }
 
-        # if not self.is_train:
-        #     self.change_setpoint = True
-        #     if self.change_setpoint:
-        #         cfg.episode_length_s = 20.0
-        #     else:
-        #         cfg.episode_length_s = 20.0
-        #     self.draw_plots = False
-        #     self.max_len_deque = 100
-        #     self.roll_history = deque(maxlen=self.max_len_deque)
-        #     self.pitch_history = deque(maxlen=self.max_len_deque)
-        #     self.yaw_history = deque(maxlen=self.max_len_deque)
-        #     self.actions_history = deque(maxlen=self.max_len_deque)
-        #     self.n_steps = 0
-        #     self.rpy_fig, self.rpy_axes = plt.subplots(4, 1, figsize=(10, 8))
-        #     self.roll_line, = self.rpy_axes[0].plot([], [], 'r', label="Roll")
-        #     self.pitch_line, = self.rpy_axes[1].plot([], [], 'g', label="Pitch")
-        #     self.yaw_line, = self.rpy_axes[2].plot([], [], 'b', label="Yaw")
-        #     self.actions_lines = [self.rpy_axes[3].plot([], [], label=f"{legend}")[0] for legend in ["Thrust", "Roll rate", "Pitch rate", "Yaw rate"]]
-
-        #     if self.num_envs > 1:
-        #         self.draw_plots = False
-        #         plt.close(self.rpy_fig)
-
-        #     Configure subplots
-        #     for ax, title in zip(self.rpy_axes, ["Roll History", "Pitch History", "Yaw History", "Actions History"]):
-        #         ax.set_title(title)
-        #         ax.set_xlabel("Time Step")
-        #         if any(angle in title for angle in ["Roll", "Pitch", "Yaw"]):
-        #             ax.set_ylabel("Angle (°)")
-        #         elif title == "Actions History":
-        #             ax.set_ylabel("Action")
-        #         ax.legend(loc="upper left")
-        #         ax.grid(True)
-
-        #     plt.tight_layout()
-        #     plt.ion()  # interactive mode
-
         # Get specific body indices
         self._body_id = self._robot.find_bodies("body")[0]
         self._robot_mass = self._robot.root_physx_view.get_masses()[0].sum()
@@ -367,7 +331,7 @@ class QuadcopterEnv(DirectRLEnv):
         if not self.cfg.use_simple_model:
             # Update PD loop at a lower rate
             if self.pd_loop_counter % self.cfg.pd_loop_decimation == 0:
-                self._wrench_des[:, 1:] = self._get_moment_from_ctbr(self._actions)      ##
+                self._wrench_des[:, 1:] = self._get_moment_from_ctbr(self._actions)     ##
                 self._motor_speeds_des = self._compute_motor_speeds(self._wrench_des)   ##
 
             self.pd_loop_counter += 1
@@ -381,8 +345,13 @@ class QuadcopterEnv(DirectRLEnv):
             elif self.iteration <= self.cfg.curriculum_start:
                 self.motor_noise_std = 0
             else:
-                self.motor_noise_std = (self.iteration - self.cfg.curriculum_start) / (self.cfg.curriculum_end - self.cfg.curriculum_start) * self.cfg.max_motor_noise_std
-                self.motor_noise_std = self.motor_noise_std if self.motor_noise_std < self.cfg.max_motor_noise_std else self.cfg.max_motor_noise_std
+                if self.cfg.curriculum_step_interval > 0:
+                    step_count = (self.iteration - self.cfg.curriculum_start) // self.cfg.curriculum_step_interval
+                    self.motor_noise_std = step_count * (self.cfg.max_motor_noise_std / ((self.cfg.curriculum_end - self.cfg.curriculum_start) // self.cfg.curriculum_step_interval))
+                else:
+                    self.motor_noise_std = (self.iteration - self.cfg.curriculum_start) / (self.cfg.curriculum_end - self.cfg.curriculum_start) * self.cfg.max_motor_noise_std
+                self.motor_noise_std = min(self.motor_noise_std, self.cfg.max_motor_noise_std)
+
             self._motor_speeds += torch.randn_like(self._motor_speeds) * self.motor_noise_std
 
             self._motor_speeds = self._motor_speeds.clamp(self.cfg.motor_speed_min, self.cfg.motor_speed_max) # Motor saturation
@@ -410,57 +379,45 @@ class QuadcopterEnv(DirectRLEnv):
         )
         ids_reward = torch.where(give_reward)[0]
 
-        # print(f"timer: {episode_time - self._previous_t}")
-        # print(f"time_since_change: {episode_time - self._previous_t_change_point}")
-        # print(f"episode_time: {episode_time}")
-        # print(f"distance_to_goal: {distance_to_goal}")
-        # print(f"self.first_approach: {self.first_approach}")
-        # print(f"initial_cond: {initial_cond}, close_to_goal: {close_to_goal}, slow_speed: {slow_speed}, time_cond: {time_cond}, give_reward: {give_reward}")
-        # input()
+        lin_vel = torch.sum(torch.square(self._robot.data.root_com_lin_vel_b), dim=1)
+        ang_vel = torch.sum(torch.square(self._robot.data.root_com_ang_vel_b), dim=1)
 
-        if self.is_train:
-            lin_vel = torch.sum(torch.square(self._robot.data.root_com_lin_vel_b), dim=1)
-            ang_vel = torch.sum(torch.square(self._robot.data.root_com_ang_vel_b), dim=1)
+        approaching = torch.relu(self.closest_distance_to_goal - distance_to_goal)
+        self.closest_distance_to_goal = torch.minimum(self.closest_distance_to_goal, distance_to_goal)
+        self.closest_distance_to_goal = torch.where(
+            self.closest_distance_to_goal < 0.0, distance_to_goal, self.closest_distance_to_goal
+        )
 
-            # approaching = torch.relu(self._last_distance_to_goal - distance_to_goal)
-            approaching = torch.relu(self.closest_distance_to_goal - distance_to_goal)
-            self.closest_distance_to_goal = torch.minimum(self.closest_distance_to_goal, distance_to_goal)
-            self.closest_distance_to_goal = torch.where(
-                self.closest_distance_to_goal < 0.0, distance_to_goal, self.closest_distance_to_goal
-            )
+        self._last_distance_to_goal = distance_to_goal.clone()
 
-            self._last_distance_to_goal = distance_to_goal.clone()
+        k = 2 * self.cfg.proximity_threshold / torch.log(torch.tensor(2.0 / self.cfg.eps_tanh - 1))
+        convergence = 1 - torch.tanh(distance_to_goal / k)
 
-            k = 2 * self.cfg.proximity_threshold / torch.log(torch.tensor(2.0 / self.cfg.eps_tanh - 1))
-            convergence = 1 - torch.tanh(distance_to_goal / k)
+        yaw_w_mapped = torch.exp(-10.0 * torch.abs(self.unwrapped_yaw))
 
-            yaw_w_mapped = torch.exp(-10.0 * torch.abs(self.unwrapped_yaw))
+        cmd_smoothness = torch.sum(torch.square(self._actions - self._previous_action), dim=1)
+        cmd_body_rates_smoothness = torch.sum(torch.square(self._actions[:, 1:]), dim=1)
 
-            cmd_smoothness = torch.sum(torch.square(self._actions - self._previous_action), dim=1)
-            cmd_body_rates_smoothness = torch.sum(torch.square(self._actions[:, 1:]), dim=1)
+        rewards = {
+            "lin_vel": lin_vel * self.cfg.lin_vel_reward_scale * self.step_dt,
+            "ang_vel": ang_vel * self.cfg.ang_vel_reward_scale * self.step_dt,
 
-            rewards = {
-                "lin_vel": lin_vel * self.cfg.lin_vel_reward_scale * self.step_dt,
-                "ang_vel": ang_vel * self.cfg.ang_vel_reward_scale * self.step_dt,
+            "approaching_goal": approaching * self.cfg.approaching_goal_reward_scale * self.step_dt,
+            "convergence_goal": convergence * self.cfg.convergence_goal_reward_scale * self.step_dt,
 
-                "approaching_goal": approaching * self.cfg.approaching_goal_reward_scale,
-                "convergence_goal": convergence * self.cfg.convergence_goal_reward_scale * self.step_dt,
+            "yaw": yaw_w_mapped * self.cfg.yaw_reward_scale * self.step_dt,
 
-                "yaw": yaw_w_mapped * self.cfg.yaw_reward_scale * self.step_dt,
+            "cmd_smoothness": cmd_smoothness * self.cfg.cmd_smoothness_reward_scale * self.step_dt,
+            "cmd_body_rates": cmd_body_rates_smoothness * self.cfg.cmd_body_rates_reward_scale * self.step_dt,
 
-                "cmd_smoothness": cmd_smoothness * self.cfg.cmd_smoothness_reward_scale * self.step_dt,
-                "cmd_body_rates": cmd_body_rates_smoothness * self.cfg.cmd_body_rates_reward_scale * self.step_dt,
+            "new_goal": give_reward * self.cfg.new_goal_reward_scale,
+        }
+        reward = torch.sum(torch.stack(list(rewards.values())), dim=0)
+        reward = torch.where(self.reset_terminated, torch.ones_like(reward) * self.cfg.death_cost, reward)
 
-                "new_goal": give_reward * self.cfg.new_goal_reward_scale,
-            }
-            reward = torch.sum(torch.stack(list(rewards.values())), dim=0)
-            reward = torch.where(self.reset_terminated, torch.ones_like(reward) * self.cfg.death_cost, reward)
-
-            # Logging
-            for key, value in rewards.items():
-                self._episode_sums[key] += value
-        else:
-            reward = torch.zeros(self.num_envs, device=self.device)
+        # Logging
+        for key, value in rewards.items():
+            self._episode_sums[key] += value
 
         # check to change setpoint
         ids_not_close = torch.where(torch.logical_not(close_to_goal))[0]
@@ -480,7 +437,7 @@ class QuadcopterEnv(DirectRLEnv):
         return reward
     
     # _get_observations is executed after _get_rewards
-    def _get_observations(self):
+    def _get_observations(self) -> dict:
         desired_pos_b, _ = subtract_frame_transforms(self._robot.data.root_link_state_w[:, :3],
                                                      self._robot.data.root_link_state_w[:, 3:7],
                                                      self._desired_pos_w)
@@ -513,38 +470,7 @@ class QuadcopterEnv(DirectRLEnv):
 
         self._previous_action = self._actions.clone()
 
-        # if not self.is_train:
-        #     if self.draw_plots:
-        #         # RPY plots
-        #         roll_w = wrap_to_pi(rpy[0])
-        #         pitch_w = wrap_to_pi(rpy[1])
-
-        #         self.roll_history.append(roll_w * 180.0 / np.pi)
-        #         self.pitch_history.append(pitch_w * 180.0 / np.pi)
-        #         self.yaw_history.append(self.unwrapped_yaw * 180.0 / np.pi)
-        #         self.actions_history.append(self._actions.squeeze(0).cpu().numpy())
-
-        #         self.n_steps += 1
-        #         if self.n_steps >= self.max_len_deque:
-        #             steps = np.arange(self.n_steps - self.max_len_deque, self.n_steps)
-        #         else:
-        #             steps = np.arange(self.n_steps)
-
-        #         self.roll_line.set_data(steps, self.roll_history)
-        #         self.pitch_line.set_data(steps, self.pitch_history)
-        #         self.yaw_line.set_data(steps, self.yaw_history)
-
-        #         for i in range(self.cfg.action_space):
-        #             self.actions_lines[i].set_data(steps, np.array(self.actions_history)[:, i])
-
-        #         for ax in self.rpy_axes:
-        #             ax.relim()
-        #             ax.autoscale_view()
-
-        #         plt.draw()
-        #         plt.pause(0.001)
-
-        return obs
+        return observations
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
         time_out = self.episode_length_buf >= self.max_episode_length - 1
@@ -644,7 +570,7 @@ class QuadcopterEnv(DirectRLEnv):
         # create markers if necessary for the first time
         if debug_vis:
             if not hasattr(self, "goal_pos_visualizer"):
-                marker_cfg = GOAL_MARKER_CFG.copy()
+                marker_cfg = CUBOID_MARKER_CFG.copy()
                 # -- goal pose
                 marker_cfg.prim_path = "/Visuals/Command/goal_position"
                 self.goal_pos_visualizer = VisualizationMarkers(marker_cfg)

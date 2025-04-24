@@ -14,13 +14,14 @@ from isaaclab.app import AppLauncher
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Train an RL agent with TD-MPC.")
-parser.add_argument("--video", action="store_true", default=False, help="Save videos during training.")
-parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
-parser.add_argument("--task", type=str, default=None, help="Name of the task.")
-parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
-parser.add_argument("--exp_name", type=str, default=None, help="Name of the experiment.")
-parser.add_argument("--use_wandb", action="store_true", default=False, help="Use wandb for logging.")
-parser.add_argument("--save_model", action="store_true", default=False, help="Save model.")
+parser.add_argument("--video", "-v", action="store_true", default=False, help="Save videos during training.")
+parser.add_argument("--num_envs", "-ne", type=int, default=None, help="Number of environments to simulate.")
+parser.add_argument("--task", "-t", type=str, default=None, help="Name of the task.")
+parser.add_argument("--seed", "-s", type=int, default=None, help="Seed used for the environment")
+parser.add_argument("--exp_name", "-en", type=str, default=None, help="Name of the experiment.")
+parser.add_argument("--use_wandb", "-uw", action="store_true", default=False, help="Use wandb for logging.")
+parser.add_argument("--save_model", "-sm", action="store_true", default=False, help="Save model.")
+parser.add_argument("--update_multiplier", "-um", type=float, default=1.0, help="Update multiplier.")
 
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -78,13 +79,13 @@ class EnvWrapper(gym.Env):
 	def reset(self):
 		obs, info = self.env.reset()
 		self.t = 0
-		return obs.squeeze(0)
+		return obs['policy'].squeeze(0)
 	
 	def step(self, action):
 		self.t += 1
 		action = action.unsqueeze(0)
 		obs, reward, _, done, info = self.env.step(action)
-		return obs.squeeze(0), reward.item(), self.t >= self.max_episode_length, info # type: ignore
+		return obs['policy'].squeeze(0), reward.item(), self.t >= self.max_episode_length, info # type: ignore
 	
 	def __str__(self):
 		return f"<{type(self).__name__}{self.env}>"
@@ -218,7 +219,10 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 	
 	# setup video recording
 	agent_cfg.save_video = args_cli.video
-	
+
+	# update multiplier
+	agent_cfg.update_multiplier = args_cli.update_multiplier
+
 	# Initialize agent and buffer
 	agent = TDMPC(agent_cfg)
 	buffer = ReplayBuffer(agent_cfg)
@@ -248,6 +252,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 		train_metrics = {}
 		if step >= agent_cfg.seed_steps:
 			num_updates = agent_cfg.seed_steps if step == agent_cfg.seed_steps else agent_cfg.episode_length
+			num_updates = int(num_updates * args_cli.update_multiplier)
 			for i in range(num_updates):
 				train_metrics.update(agent.update(buffer, step+i))
 
@@ -268,7 +273,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 		if env_step % agent_cfg.eval_freq == 0:
 			common_metrics['episode_reward'], common_metrics['episode_reward_std'] = \
 				evaluate(env, agent, agent_cfg.eval_episodes, step, env_step, L.video)
-			L.log(common_metrics, category='eval')
+			L.log(common_metrics, category='eval', agent=agent)
 
 	L.finish(agent)
 	print('Training completed successfully')
