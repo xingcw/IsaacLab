@@ -22,6 +22,8 @@ parser.add_argument("--exp_name", "-en", type=str, default=None, help="Name of t
 parser.add_argument("--use_wandb", "-uw", action="store_true", default=False, help="Use wandb for logging.")
 parser.add_argument("--save_model", "-sm", action="store_true", default=False, help="Save model.")
 parser.add_argument("--update_multiplier", "-um", type=float, default=1.0, help="Update multiplier.")
+parser.add_argument("--finetune_dynamics", "-fd", action="store_true", default=False, help="Finetune dynamics.")
+parser.add_argument("--ckpt_path", "-cp", type=str, default=None, help="Path to the checkpoint file.")
 
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -223,9 +225,16 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 	# update multiplier
 	agent_cfg.update_multiplier = args_cli.update_multiplier
 
+	if args_cli.ckpt_path:
+		agent_cfg.lr = 1e-5
+		
 	# Initialize agent and buffer
 	agent = TDMPC(agent_cfg)
 	buffer = ReplayBuffer(agent_cfg)
+	
+	if args_cli.ckpt_path:
+		agent.load(args_cli.ckpt_path, dynamics_only=args_cli.finetune_dynamics)
+		print(f"Loaded model from {args_cli.ckpt_path}")
 	
 	# Dump configurations
 	dump_yaml(os.path.join(work_dir, "params", "env.yaml"), env_cfg)

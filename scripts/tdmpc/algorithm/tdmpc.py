@@ -71,11 +71,19 @@ class TDMPC():
 		"""Save state dict of TOLD model to filepath."""
 		torch.save(self.state_dict(), fp)
 	
-	def load(self, fp):
+	def load(self, fp, dynamics_only=False):
 		"""Load a saved state dict from filepath into current agent."""
 		d = torch.load(fp)
-		self.model.load_state_dict(d['model'])
-		self.model_target.load_state_dict(d['model_target'])
+		if dynamics_only:
+			dynamics_model = {k.replace('_dynamics.', ''): v for k, v in d['model'].items() if 'dynamics' in k}
+			self.model._dynamics.load_state_dict(dynamics_model)
+			target_dynamics_model = {k.replace('_dynamics.', ''): v for k, v in d['model_target'].items() if 'dynamics' in k}
+			self.model_target._dynamics.load_state_dict(target_dynamics_model)
+			print(f"Loaded only dynamics model from {fp}")
+		else:
+			self.model.load_state_dict(d['model'])
+			self.model_target.load_state_dict(d['model_target'])
+			print(f"Loaded all models from {fp}")
 
 	@torch.no_grad()
 	def estimate_value(self, z, actions, horizon):
