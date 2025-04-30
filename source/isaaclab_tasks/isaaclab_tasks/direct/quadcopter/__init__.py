@@ -25,6 +25,7 @@ gym.register(
         "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:QuadcopterPPORunnerCfg",
         "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_cfg.yaml",
         "tdmpc_cfg_entry_point": f"{agents.__name__}:tdmpc_cfg.yaml",
+        "tdmpc2_cfg_entry_point": f"{agents.__name__}:tdmpc2_cfg.yaml",
     },
 )
 
@@ -39,6 +40,7 @@ gym.register(
         "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:QuadcopterPPORunnerCfg",
         "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_cfg.yaml",
         "tdmpc_cfg_entry_point": f"{agents.__name__}:tdmpc_cfg.yaml",
+        "tdmpc2_cfg_entry_point": f"{agents.__name__}:tdmpc2_cfg.yaml",
     },
 )
 
@@ -53,6 +55,7 @@ gym.register(
         "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:QuadcopterPPORunnerCfg",
         "skrl_cfg_entry_point": f"{agents.__name__}:skrl_ppo_cfg.yaml",
         "tdmpc_cfg_entry_point": f"{agents.__name__}:tdmpc_cfg.yaml",
+        "tdmpc2_cfg_entry_point": f"{agents.__name__}:tdmpc2_cfg.yaml",
     },
 )
 

@@ -86,15 +86,16 @@ class EnvWrapper(gym.Env):
 	def step(self, action):
 		self.t += 1
 		action = action.unsqueeze(0)
-		obs, reward, _, done, info = self.env.step(action)
-		return obs['policy'].squeeze(0), reward.item(), self.t >= self.max_episode_length, info # type: ignore
+		obs, reward, terminated, time_outs, info = self.env.step(action)
+		done = self.t >= self.max_episode_length or time_outs
+		return obs['policy'].squeeze(0), reward.item(), done, info # type: ignore
 	
 	def __str__(self):
 		return f"<{type(self).__name__}{self.env}>"
 
 	def __repr__(self):
 		return str(self)
-
+		
 	@property
 	def cfg(self) -> object:
 		"""Returns the configuration class instance of the environment."""

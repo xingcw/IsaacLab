@@ -464,7 +464,7 @@ class QuadcopterEnv(DirectRLEnv):
         return observations
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
-        time_out = self.episode_length_buf >= self.max_episode_length - 1
+        time_out = self.episode_length_buf >= self.max_episode_length
         episode_time = (self.episode_length_buf - self._episode_length_buf_zero) * self.cfg.sim.dt * self.cfg.decimation
         cond_h_min_time = torch.logical_and(
             self._robot.data.root_link_pos_w[:, 2] < self.cfg.min_altitude, \
