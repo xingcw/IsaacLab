@@ -355,77 +355,113 @@ class QuadcopterEnv(DirectRLEnv):
 
         self._robot.set_external_force_and_torque(self._thrust, self._moment, body_ids=self._body_id)
 
+    # def _get_rewards(self) -> torch.Tensor:
+    #     distance_to_goal = torch.linalg.norm(self._desired_pos_w - self._robot.data.root_link_pos_w, dim=1)
+    #     # episode_time = self.episode_length_buf * self.cfg.sim.dt * self.cfg.decimation  # updated at each step
+    #     # close_to_goal = (distance_to_goal < self.cfg.proximity_threshold).to(self.device)
+    #     # initial_cond = self.first_approach & close_to_goal
+    #     # slow_speed = torch.linalg.norm(self._robot.data.root_com_lin_vel_b, dim=1) < self.cfg.velocity_threshold
+    #     # time_cond = (episode_time - self._previous_t) >= self.cfg.wait_time_s
+
+    #     # give_reward = torch.where(
+    #     #     initial_cond,
+    #     #     torch.tensor(True, device=self.device),
+    #     #     close_to_goal & slow_speed & time_cond
+    #     # )
+    #     # ids_reward = torch.where(give_reward)[0]
+
+    #     lin_vel = torch.sum(torch.square(self._robot.data.root_com_lin_vel_b), dim=1)
+    #     ang_vel = torch.sum(torch.square(self._robot.data.root_com_ang_vel_b), dim=1)
+
+    #     approaching = torch.relu(self.closest_distance_to_goal - distance_to_goal)
+    #     self.closest_distance_to_goal = torch.minimum(self.closest_distance_to_goal, distance_to_goal)
+    #     self.closest_distance_to_goal = torch.where(
+    #         self.closest_distance_to_goal < 0.0, distance_to_goal, self.closest_distance_to_goal
+    #     )
+
+    #     self._last_distance_to_goal = distance_to_goal.clone()
+
+    #     k = 2 * self.cfg.proximity_threshold / torch.log(torch.tensor(2.0 / self.cfg.eps_tanh - 1))
+    #     convergence = 1 - torch.tanh(distance_to_goal / k)
+
+    #     yaw_w_mapped = torch.exp(-10.0 * torch.abs(self.unwrapped_yaw))
+
+    #     cmd_smoothness = torch.sum(torch.square(self._actions - self._previous_action), dim=1)
+    #     cmd_body_rates_smoothness = torch.sum(torch.square(self._actions[:, 1:]), dim=1)
+
+    #     rewards = {
+    #         "lin_vel": lin_vel * self.cfg.lin_vel_reward_scale * self.step_dt,
+    #         "ang_vel": ang_vel * self.cfg.ang_vel_reward_scale * self.step_dt,
+
+    #         "approaching_goal": approaching * self.cfg.approaching_goal_reward_scale * self.step_dt,
+    #         "convergence_goal": convergence * self.cfg.convergence_goal_reward_scale * self.step_dt,
+
+    #         "yaw": yaw_w_mapped * self.cfg.yaw_reward_scale * self.step_dt,
+
+    #         "cmd_smoothness": cmd_smoothness * self.cfg.cmd_smoothness_reward_scale * self.step_dt,
+    #         "cmd_body_rates": cmd_body_rates_smoothness * self.cfg.cmd_body_rates_reward_scale * self.step_dt,
+
+    #         # "new_goal": give_reward * self.cfg.new_goal_reward_scale,
+    #     }
+    #     reward = torch.sum(torch.stack(list(rewards.values())), dim=0)
+    #     reward = torch.where(self.reset_terminated, torch.ones_like(reward) * self.cfg.death_cost, reward)
+
+    #     # Logging
+    #     for key, value in rewards.items():
+    #         self._episode_sums[key] += value
+
+    #     # check to change setpoint
+    #     # ids_not_close = torch.where(torch.logical_not(close_to_goal))[0]
+    #     # self._previous_t[ids_not_close] = episode_time[ids_not_close]
+    #     # self._previous_t[ids_reward] = episode_time[ids_reward]
+    #     # change_setpoint_mask = ~self.first_approach[ids_reward] & (torch.rand(len(ids_reward), device=self.device) < self.cfg.prob_change)
+    #     # self.first_approach = self.first_approach & ~close_to_goal
+    #     # ids_to_change = ids_reward[change_setpoint_mask]
+    #     # self.first_approach[ids_to_change] = True
+    #     # if len(ids_to_change) > 0:
+    #     #     self._desired_pos_w[ids_to_change, :2] = torch.zeros_like(self._desired_pos_w[ids_to_change, :2]).uniform_(-2.0, 2.0)
+    #     #     self._desired_pos_w[ids_to_change, :2] += self._terrain.env_origins[ids_to_change, :2]
+    #     #     self._desired_pos_w[ids_to_change, 2] = torch.zeros_like(self._desired_pos_w[ids_to_change, 2]).uniform_(0.5, 1.5)
+    #     #     self._previous_t[ids_to_change] = episode_time[ids_to_change]
+    #     #     self._previous_t_change_point[ids_to_change] = episode_time[ids_to_change]
+
+    #     return reward
+
     def _get_rewards(self) -> torch.Tensor:
-        distance_to_goal = torch.linalg.norm(self._desired_pos_w - self._robot.data.root_link_pos_w, dim=1)
-        # episode_time = self.episode_length_buf * self.cfg.sim.dt * self.cfg.decimation  # updated at each step
-        # close_to_goal = (distance_to_goal < self.cfg.proximity_threshold).to(self.device)
-        # initial_cond = self.first_approach & close_to_goal
-        # slow_speed = torch.linalg.norm(self._robot.data.root_com_lin_vel_b, dim=1) < self.cfg.velocity_threshold
-        # time_cond = (episode_time - self._previous_t) >= self.cfg.wait_time_s
+        pos = self._robot.data.root_link_pos_w
+        vel = self._robot.data.root_com_lin_vel_b
+        act = self._actions
+        prev_act = self._previous_action
 
-        # give_reward = torch.where(
-        #     initial_cond,
-        #     torch.tensor(True, device=self.device),
-        #     close_to_goal & slow_speed & time_cond
-        # )
-        # ids_reward = torch.where(give_reward)[0]
+        dist = torch.norm(self._desired_pos_w - pos, dim=1)
+        speed = torch.norm(vel, dim=1)
+        smooth = torch.sum((act - prev_act)**2, dim=1)
 
-        lin_vel = torch.sum(torch.square(self._robot.data.root_com_lin_vel_b), dim=1)
-        ang_vel = torch.sum(torch.square(self._robot.data.root_com_ang_vel_b), dim=1)
+        # Hover shaping
+        z = pos[:, 2]
+        low_alt_penalty = torch.where(z < 0.3, -2.0 * (0.3 - z), torch.zeros_like(z))
+        z_bonus = 1.0 * torch.exp(-((z - 1.0) / 0.3)**2)
 
-        approaching = torch.relu(self.closest_distance_to_goal - distance_to_goal)
-        self.closest_distance_to_goal = torch.minimum(self.closest_distance_to_goal, distance_to_goal)
-        self.closest_distance_to_goal = torch.where(
-            self.closest_distance_to_goal < 0.0, distance_to_goal, self.closest_distance_to_goal
+        # Velocity shaping
+        sigma = 0.3
+        r = 0.1
+        vel_pen = -0.5 * speed * torch.exp(-dist / sigma)
+        hover_bonus = 1.0 * torch.exp(-(dist / r) ** 2)
+
+        # Goal alignment
+        goal_dir = torch.nn.functional.normalize(self._desired_pos_w - pos, dim=1)
+        align_reward = 0.5 * torch.sum(vel * goal_dir, dim=1)
+
+        reward = (
+            -1.0 * dist
+            +0.5 * torch.tanh(2 * speed)
+            +vel_pen + hover_bonus 
+            + 0.1 * align_reward
+            -0.05 * smooth
+            +z_bonus + low_alt_penalty
         )
-
-        self._last_distance_to_goal = distance_to_goal.clone()
-
-        k = 2 * self.cfg.proximity_threshold / torch.log(torch.tensor(2.0 / self.cfg.eps_tanh - 1))
-        convergence = 1 - torch.tanh(distance_to_goal / k)
-
-        yaw_w_mapped = torch.exp(-10.0 * torch.abs(self.unwrapped_yaw))
-
-        cmd_smoothness = torch.sum(torch.square(self._actions - self._previous_action), dim=1)
-        cmd_body_rates_smoothness = torch.sum(torch.square(self._actions[:, 1:]), dim=1)
-
-        rewards = {
-            "lin_vel": lin_vel * self.cfg.lin_vel_reward_scale * self.step_dt,
-            "ang_vel": ang_vel * self.cfg.ang_vel_reward_scale * self.step_dt,
-
-            "approaching_goal": approaching * self.cfg.approaching_goal_reward_scale * self.step_dt,
-            "convergence_goal": convergence * self.cfg.convergence_goal_reward_scale * self.step_dt,
-
-            "yaw": yaw_w_mapped * self.cfg.yaw_reward_scale * self.step_dt,
-
-            "cmd_smoothness": cmd_smoothness * self.cfg.cmd_smoothness_reward_scale * self.step_dt,
-            "cmd_body_rates": cmd_body_rates_smoothness * self.cfg.cmd_body_rates_reward_scale * self.step_dt,
-
-            # "new_goal": give_reward * self.cfg.new_goal_reward_scale,
-        }
-        reward = torch.sum(torch.stack(list(rewards.values())), dim=0)
-        reward = torch.where(self.reset_terminated, torch.ones_like(reward) * self.cfg.death_cost, reward)
-
-        # Logging
-        for key, value in rewards.items():
-            self._episode_sums[key] += value
-
-        # check to change setpoint
-        # ids_not_close = torch.where(torch.logical_not(close_to_goal))[0]
-        # self._previous_t[ids_not_close] = episode_time[ids_not_close]
-        # self._previous_t[ids_reward] = episode_time[ids_reward]
-        # change_setpoint_mask = ~self.first_approach[ids_reward] & (torch.rand(len(ids_reward), device=self.device) < self.cfg.prob_change)
-        # self.first_approach = self.first_approach & ~close_to_goal
-        # ids_to_change = ids_reward[change_setpoint_mask]
-        # self.first_approach[ids_to_change] = True
-        # if len(ids_to_change) > 0:
-        #     self._desired_pos_w[ids_to_change, :2] = torch.zeros_like(self._desired_pos_w[ids_to_change, :2]).uniform_(-2.0, 2.0)
-        #     self._desired_pos_w[ids_to_change, :2] += self._terrain.env_origins[ids_to_change, :2]
-        #     self._desired_pos_w[ids_to_change, 2] = torch.zeros_like(self._desired_pos_w[ids_to_change, 2]).uniform_(0.5, 1.5)
-        #     self._previous_t[ids_to_change] = episode_time[ids_to_change]
-        #     self._previous_t_change_point[ids_to_change] = episode_time[ids_to_change]
-
         return reward
+
     
     # _get_observations is executed after _get_rewards
     def _get_observations(self) -> dict:

@@ -105,8 +105,10 @@ for 200 steps, and saves it in the ``videos`` folder at a step interval of 1500 
     import gymnasium as gym
 
     # adjust camera resolution and pose
-    env_cfg.viewer.resolution = (640, 480)
-    env_cfg.viewer.eye = (1.0, 1.0, 1.0)
+    # env_cfg.viewer.resolution = (640, 480)
+    # env_cfg.viewer.eye = (1.0, 1.0, 1.0)
+    env_cfg.viewer.resolution = (1920, 1080)
+    env_cfg.viewer.eye = (-0.5, 0.5, 0.5)
     env_cfg.viewer.lookat = (0.0, 0.0, 0.0)
     # create isaac-env instance
     # set render mode to rgb_array to obtain images on render calls
