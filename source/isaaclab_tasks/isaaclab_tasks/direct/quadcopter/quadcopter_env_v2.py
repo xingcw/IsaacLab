@@ -461,6 +461,7 @@ class QuadcopterEnv(DirectRLEnv):
             self.extras["log"].update(extras)
             extras = dict()
             extras["Episode_Termination/died"] = torch.count_nonzero(self.reset_terminated[env_ids]).item()
+            extras["success"] = torch.all(self.reset_terminated[env_ids] == 0).item()
             extras["Episode_Termination/time_out"] = torch.count_nonzero(self.reset_time_outs[env_ids]).item()
             extras["Metrics/final_distance_to_goal"] = final_distance_to_goal.item()
             extras["Metrics/motor_noise_std"] = self.motor_noise_std
