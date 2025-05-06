@@ -75,6 +75,9 @@ class VideoRecorder:
 		if self.enabled:
 			frames = np.stack(self.frames)
 			
+			if frames.max() <= 1.0:
+				frames = (frames * 255).clip(0, 255).astype(np.uint8)
+
 			# Apply center crop if needed
 			if self.center_crop and len(frames.shape) == 4:
 				# Convert to PyTorch tensor, apply transform, back to numpy
@@ -84,7 +87,7 @@ class VideoRecorder:
 			
 			frames = frames.transpose(0, 3, 1, 2)  # NHWC -> NCHW for wandb.Video
 			print("Uploading video to wandb...")
-			self._wandb.log({'eval_video': self._wandb.Video(frames)}, step=step)
+			self._wandb.log({'eval_video': self._wandb.Video(frames, fps=20, format='mp4')}, step=step)
 
 
 class Logger(object):

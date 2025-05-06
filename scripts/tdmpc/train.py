@@ -24,6 +24,10 @@ parser.add_argument("--save_model", "-sm", action="store_true", default=False, h
 parser.add_argument("--update_multiplier", "-um", type=float, default=1.0, help="Update multiplier.")
 parser.add_argument("--finetune_dynamics", "-fd", action="store_true", default=False, help="Finetune dynamics.")
 parser.add_argument("--ckpt_path", "-cp", type=str, default=None, help="Path to the checkpoint file.")
+parser.add_argument("--eval_only", action="store_true", help="Only run evaluation using the loaded model.")
+parser.add_argument("--follow_robot", type=int, default=1, help="Which environment index to follow in viewer.")
+
+
 
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -203,6 +207,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 	log_dir = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 	work_dir = Path(os.path.join(log_root_path, log_dir))
 	
+	# # # Set viewer tracking options
+	env_cfg.viewer.origin_type = "asset_root"
+	env_cfg.viewer.env_index = 0  # Always use first environment for tracking
+	env_cfg.viewer.asset_name = "robot"
+
 	# Create isaac environment
 	env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
 
@@ -218,7 +227,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 	# setup wandb
 	agent_cfg.use_wandb = args_cli.use_wandb
 	agent_cfg.wandb_project = "isaaclab"
-	agent_cfg.wandb_entity = "chxing-university-of-pennsylvania"
+	agent_cfg.wandb_entity = "ftesshu2273-university-of-pennsylvania"
 	
 	# setup video recording
 	agent_cfg.save_video = args_cli.video
@@ -246,48 +255,54 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 	episode_idx, start_time = 0, time.time()
 
 	env = EnvWrapper(env)
-	
-	for step in range(0, agent_cfg.train_steps + agent_cfg.episode_length, agent_cfg.episode_length):
-		# Collect trajectory
-		obs = env.reset()
-		episode = Episode(agent_cfg, obs)
-		while not episode.done:
-			action = agent.plan(obs, step=step, t0=episode.first)
-			obs, reward, done, _ = env.step(action) # type: ignore
-			episode += (obs, action, reward, done)
-		assert len(episode) == agent_cfg.episode_length
-		buffer += episode
 
-		# Update model
-		train_metrics = {}
-		if step >= agent_cfg.seed_steps:
-			num_updates = agent_cfg.seed_steps if step == agent_cfg.seed_steps else agent_cfg.episode_length
-			num_updates = int(num_updates * args_cli.update_multiplier)
-			for i in range(num_updates):
-				train_metrics.update(agent.update(buffer, step+i))
+	if args_cli.eval_only:
+		# Run evaluation only
+		print("Running evaluation only mode...")
+		reward_mean, reward_std = evaluate(env, agent, agent_cfg.eval_episodes, step=0, env_step=0, video=L.video)
+		print(f"Evaluation reward: {reward_mean:.2f} ± {reward_std:.2f}")
+	else:		
+		for step in range(0, agent_cfg.train_steps + agent_cfg.episode_length, agent_cfg.episode_length):
+			# Collect trajectory
+			obs = env.reset()
+			episode = Episode(agent_cfg, obs)
+			while not episode.done:
+				action = agent.plan(obs, step=step, t0=episode.first)
+				obs, reward, done, _ = env.step(action) # type: ignore
+				episode += (obs, action, reward, done)
+			assert len(episode) == agent_cfg.episode_length
+			buffer += episode
 
-		# Log training episode
-		episode_idx += 1
-		env_step = int(step * agent_cfg.action_repeat)
-		common_metrics = {
-			'episode': episode_idx,
-			'step': step,
-			'env_step': env_step,
-			'total_time': time.time() - start_time,
-			'episode_reward': episode.cumulative_reward
-		}
-		train_metrics.update(common_metrics)
-		L.log(train_metrics, category='train')
+			# Update model
+			train_metrics = {}
+			if step >= agent_cfg.seed_steps:
+				num_updates = agent_cfg.seed_steps if step == agent_cfg.seed_steps else agent_cfg.episode_length
+				num_updates = int(num_updates * args_cli.update_multiplier)
+				for i in range(num_updates):
+					train_metrics.update(agent.update(buffer, step+i))
 
-		# Evaluate agent periodically
-		if env_step % agent_cfg.eval_freq == 0:
-			common_metrics['episode_reward'], common_metrics['episode_reward_std'] = \
-				evaluate(env, agent, agent_cfg.eval_episodes, step, env_step, L.video)
-			L.log(common_metrics, category='eval', agent=agent)
+			# Log training episode
+			episode_idx += 1
+			env_step = int(step * agent_cfg.action_repeat)
+			common_metrics = {
+				'episode': episode_idx,
+				'step': step,
+				'env_step': env_step,
+				'total_time': time.time() - start_time,
+				'episode_reward': episode.cumulative_reward
+			}
+			train_metrics.update(common_metrics)
+			L.log(train_metrics, category='train')
+			
+			# Evaluate agent periodically
+			if env_step % agent_cfg.eval_freq == 0:
+				common_metrics['episode_reward'], common_metrics['episode_reward_std'] = \
+					evaluate(env, agent, agent_cfg.eval_episodes, step, env_step, L.video)
+				L.log(common_metrics, category='eval', agent=agent)
 
-	L.finish(agent)
-	print('Training completed successfully')
-	
+		L.finish(agent)
+		print('Training completed successfully')
+		
 	# Close the simulator
 	env.close()
 
