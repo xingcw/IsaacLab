@@ -38,7 +38,7 @@ class OnlineTrainer(Trainer):
 				t += 1
 				if self.cfg.save_video:
 					self.logger.video.record(self.env)
-			ep_rewards.append(ep_reward)
+			ep_rewards.append(ep_reward.numpy()) # type: ignore
 			ep_successes.append(info['success'])
 			ep_metrics.append(info['Metrics/final_distance_to_goal'])
 			if self.cfg.save_video:
@@ -72,7 +72,7 @@ class OnlineTrainer(Trainer):
 		train_metrics, done, eval_next = {}, True, False
 		while self._step <= self.cfg.steps:
 			# Evaluate agent periodically
-			if self._step % self.cfg.eval_freq == 0 and self._step > 0:
+			if self._step % self.cfg.eval_freq == 0:
 				eval_next = True
 
 			# Reset environment

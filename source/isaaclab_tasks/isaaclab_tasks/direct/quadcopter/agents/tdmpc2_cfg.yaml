@@ -42,7 +42,7 @@ temperature: 0.5
 # actor
 log_std_min: -10
 log_std_max: 2
-entropy_coef: 1e-4
+entropy_coef: 0.0001
 
 # critic
 num_bins: 101
@@ -63,7 +63,7 @@ simnorm_dim: 8
 
 # logging
 wandb_project: tdmpc2
-wandb_entity: ???
+wandb_entity: chxing-university-of-pennsylvania
 wandb_silent: false
 enable_wandb: false
 save_csv: true

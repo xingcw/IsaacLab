@@ -17,11 +17,13 @@ parser = argparse.ArgumentParser(description="Train an RL agent with TD-MPC.")
 parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
 parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
 parser.add_argument("--video_interval", type=int, default=2000, help="Interval between video recordings (in steps).")
-parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
-parser.add_argument("--task", type=str, default=None, help="Name of the task.")
-parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
+parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to simulate.")
+parser.add_argument("--task", type=str, default="Isaac-Quadcopter-Direct-v1", help="Name of the task.")
+parser.add_argument("--seed", type=int, default=0, help="Seed used for the environment")
 parser.add_argument("--max_iterations", type=int, default=None, help="RL Policy training iterations.")
-
+parser.add_argument("--exp_name", type=str, default="default", help="Name of the experiment.")
+parser.add_argument("--use_wandb", "-uw", action="store_true", default=False, help="Use wandb for logging.")
+parser.add_argument("--save_model", "-sm", action="store_true", default=False, help="Save model.")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 args_cli, hydra_args = parser.parse_known_args()
@@ -98,7 +100,7 @@ class EnvWrapper(gym.Env):
 		action = action.unsqueeze(0)
 		obs, reward, _, time_outs, info = self.env.step(action)
 		done = self.t >= self.max_episode_length or time_outs
-		return obs['policy'].squeeze(0), reward, done, info['log'] # type: ignore
+		return obs['policy'].squeeze(0), reward.cpu(), done, info['log'] # type: ignore
 
 	@property
 	def action_space(self):
@@ -151,6 +153,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
 	agent_cfg = OmegaConf.create(agent_cfg)
 	agent_cfg = parse_cfg(agent_cfg) # type: ignore
+	agent_cfg.task = args_cli.task
 
 	# Set seeds
 	seed = set_seed(args_cli.seed if args_cli.seed is not None else agent_cfg.seed)
@@ -176,7 +179,17 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 	print("action_shape: ", agent_cfg.action_shape)
 	print("action_dim: ", agent_cfg.action_dim)
 	agent_cfg.device = "cuda"
-	agent_cfg.task_title = agent_cfg.task.replace('-', ' ').title()
+	agent_cfg.task_title = args_cli.task.replace('-', ' ').title()
+
+	# configure wandb
+	agent_cfg.enable_wandb = args_cli.use_wandb
+	agent_cfg.exp_name = args_cli.exp_name
+	agent_cfg.wandb_project = "finetune-world-models"
+	agent_cfg.wandb_entity = "chxing-university-of-pennsylvania"
+	
+	# configure video
+	agent_cfg.save_video = args_cli.video
+	agent_cfg.save_model = args_cli.save_model
 	
 	# Wrap for video recording
 	if args_cli.video:

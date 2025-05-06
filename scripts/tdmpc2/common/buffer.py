@@ -83,8 +83,8 @@ class Buffer():
 
 	def add(self, td):
 		"""Add an episode to the buffer."""
-		td['episode'] = torch.full_like(td['reward'], self._num_eps, dtype=torch.int64)
-		import pdb; pdb.set_trace()
+		td['episode'] = torch.full_like(td['reward'].squeeze(-1), self._num_eps, dtype=torch.int64)
+		assert td['episode'].ndim == 1, f"Episode tensor has shape {td['episode'].shape}"
 		if self._num_eps == 0:
 			self._buffer = self._init(td)
 		self._buffer.extend(td)
@@ -99,7 +99,7 @@ class Buffer():
 		td = td.select("obs", "action", "reward", "task", strict=False).to(self._device, non_blocking=True)
 		obs = td.get('obs').contiguous()
 		action = td.get('action')[1:].contiguous()
-		reward = td.get('reward')[1:].unsqueeze(-1).contiguous()
+		reward = td.get('reward')[1:].contiguous()
 		task = td.get('task', None)
 		if task is not None:
 			task = task[0].contiguous()

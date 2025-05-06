@@ -117,6 +117,7 @@ class Logger:
 		print_run(cfg)
 		self.project = cfg.get("wandb_project", "none")
 		self.entity = cfg.get("wandb_entity", "none")
+		self.exp_name = cfg.get("exp_name", "none")
 		if not cfg.enable_wandb or self.project == "none" or self.entity == "none":
 			print(colored("Wandb disabled.", "blue", attrs=["bold"]))
 			cfg.save_agent = False
@@ -130,9 +131,9 @@ class Logger:
 		wandb.init(
 			project=self.project,
 			entity=self.entity,
-			name=str(cfg.seed),
-			group=self._group,
-			tags=cfg_to_group(cfg, return_list=True) + [f"seed:{cfg.seed}"],
+			name=self.exp_name + f"_{self._log_dir.name}",
+			group=self._group, # type: ignore
+			tags=cfg_to_group(cfg, return_list=True) + [f"seed:{cfg.seed}"], # type: ignore
 			dir=self._log_dir,
 			config=dataclasses.asdict(cfg),
 		)
@@ -158,7 +159,7 @@ class Logger:
 			agent.save(fp)
 			if self._wandb:
 				artifact = self._wandb.Artifact(
-					self._group + '-' + str(self._seed) + '-' + str(identifier),
+					self._group + '-' + str(self._seed) + '-' + str(identifier), # type: ignore
 					type='model',
 				)
 				artifact.add_file(fp)
@@ -184,7 +185,7 @@ class Logger:
 			raise f"invalid log format type: {ty}"
 
 	def _print(self, d, category):
-		category = colored(category, CAT_TO_COLOR[category])
+		category = colored(category, CAT_TO_COLOR[category]) # type: ignore
 		pieces = [f" {category:<14}"]
 		for k, disp_k, ty in CONSOLE_FORMAT:
 			if k in d:
@@ -235,7 +236,5 @@ class Logger:
 		if category == "eval" and self._save_csv:
 			keys = ["step", "episode_reward"]
 			self._eval.append(np.array([d[keys[0]], d[keys[1]]]))
-			pd.DataFrame(np.array(self._eval)).to_csv(
-				self._log_dir / "eval.csv", header=keys, index=None
-			)
+			pd.DataFrame(np.array(self._eval)).to_csv(self._log_dir / "eval.csv", header=keys, index=None) # type: ignore
 		self._print(d, category)
