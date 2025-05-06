@@ -62,3 +62,4 @@ _build
 /.pretrained_checkpoints/
 
 test.ipynb
+tmp/*

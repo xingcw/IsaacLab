@@ -84,7 +84,7 @@ episode_length: 1000
 obs_shapes: ???
 action_dims: ???
 episode_lengths: ???
-seed_steps: ???
+seed_steps: 1000
 bin_size: ???
 
 # speedups

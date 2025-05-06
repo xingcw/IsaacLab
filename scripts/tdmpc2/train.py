@@ -91,13 +91,14 @@ class EnvWrapper(gym.Env):
 	def reset(self):
 		obs, info = self.env.reset()
 		self.t = 0
-		return obs.squeeze(0)
+		return obs['policy'].squeeze(0)
 	
 	def step(self, action):
 		self.t += 1
 		action = action.unsqueeze(0)
-		obs, reward, _, done, info = self.env.step(action)
-		return obs.squeeze(0), reward.item(), self.t >= self.max_episode_length, info # type: ignore
+		obs, reward, _, time_outs, info = self.env.step(action)
+		done = self.t >= self.max_episode_length or time_outs
+		return obs['policy'].squeeze(0), reward, done, info['log'] # type: ignore
 
 	@property
 	def action_space(self):
@@ -110,6 +111,20 @@ class EnvWrapper(gym.Env):
 	@property
 	def max_episode_length(self):
 		return self.env.unwrapped.max_episode_length # type: ignore
+	
+	@property
+	def unwrapped(self):
+		return self.env.unwrapped # type: ignore
+	
+	@property
+	def step_id(self):
+		return self.env.step_id # type: ignore
+	
+	def render(self):
+		return self.env.unwrapped.render() # type: ignore
+	
+	def rand_act(self):
+		return torch.from_numpy(self.action_space.sample().astype(np.float32)).squeeze(0)
 	
 	def __getattr__(self, name):
 		return getattr(self.env, name)
@@ -125,26 +140,6 @@ def set_seed(seed):
 	return seed
 
 
-def evaluate(env, agent, num_episodes, step, env_step, video):
-	"""Evaluate a trained agent and optionally save a video."""
-	episode_rewards = []
-	for i in range(num_episodes):
-		obs, done, ep_reward, t = env.reset(), False, 0, 0
-		if video: 
-			video.init(env, enabled=(i==0))
-		while not done:
-			action = agent.plan(obs, eval_mode=True, step=step, t0=t==0)
-			obs, reward, done, _ = env.step(action)
-			ep_reward += reward
-			if video: 
-				video.record(env)
-			t += 1
-		episode_rewards.append(ep_reward)
-		if video: 
-			video.save(env_step)
-	return np.nanmean(episode_rewards)
-
-
 @hydra_task_config(args_cli.task, "tdmpc2_cfg_entry_point")
 def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: DictConfig):
 	"""Train with TD-MPC agent."""
@@ -155,7 +150,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 	env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
 
 	agent_cfg = OmegaConf.create(agent_cfg)
-	agent_cfg = parse_cfg(agent_cfg)
+	agent_cfg = parse_cfg(agent_cfg) # type: ignore
 
 	# Set seeds
 	seed = set_seed(args_cli.seed if args_cli.seed is not None else agent_cfg.seed)

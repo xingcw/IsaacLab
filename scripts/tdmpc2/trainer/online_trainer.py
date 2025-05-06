@@ -25,7 +25,7 @@ class OnlineTrainer(Trainer):
 
 	def eval(self):
 		"""Evaluate a TD-MPC2 agent."""
-		ep_rewards, ep_successes = [], []
+		ep_rewards, ep_successes, ep_metrics = [], [], []
 		for i in range(self.cfg.eval_episodes):
 			obs, done, ep_reward, t = self.env.reset(), False, 0, 0
 			if self.cfg.save_video:
@@ -40,11 +40,13 @@ class OnlineTrainer(Trainer):
 					self.logger.video.record(self.env)
 			ep_rewards.append(ep_reward)
 			ep_successes.append(info['success'])
+			ep_metrics.append(info['Metrics/final_distance_to_goal'])
 			if self.cfg.save_video:
 				self.logger.video.save(self._step)
 		return dict(
 			episode_reward=np.nanmean(ep_rewards),
 			episode_success=np.nanmean(ep_successes),
+			episode_metrics=np.nanmean(ep_metrics),
 		)
 
 	def to_td(self, obs, action=None, reward=None):
@@ -56,12 +58,13 @@ class OnlineTrainer(Trainer):
 		if action is None:
 			action = torch.full_like(self.env.rand_act(), float('nan'))
 		if reward is None:
-			reward = torch.tensor(float('nan'))
+			reward = torch.tensor(float('nan')).reshape(1)
 		td = TensorDict(
-			obs=obs,
-			action=action.unsqueeze(0),
-			reward=reward.unsqueeze(0),
-		batch_size=(1,))
+				obs=obs,                           # type: ignore
+				action=action.unsqueeze(0).cpu(),  # type: ignore
+				reward=reward.unsqueeze(0).cpu(),  # type: ignore
+				batch_size=(1,)
+			) # type: ignore
 		return td
 
 	def train(self):
@@ -69,14 +72,14 @@ class OnlineTrainer(Trainer):
 		train_metrics, done, eval_next = {}, True, False
 		while self._step <= self.cfg.steps:
 			# Evaluate agent periodically
-			if self._step % self.cfg.eval_freq == 0:
+			if self._step % self.cfg.eval_freq == 0 and self._step > 0:
 				eval_next = True
 
 			# Reset environment
 			if done:
 				if eval_next:
 					eval_metrics = self.eval()
-					eval_metrics.update(self.common_metrics())
+					eval_metrics.update(self.common_metrics()) # type: ignore
 					self.logger.log(eval_metrics, 'eval')
 					eval_next = False
 
@@ -85,9 +88,9 @@ class OnlineTrainer(Trainer):
 						episode_reward=torch.tensor([td['reward'] for td in self._tds[1:]]).sum(),
 						episode_success=info['success'],
 					)
-					train_metrics.update(self.common_metrics())
+					train_metrics.update(self.common_metrics()) # type: ignore
 					self.logger.log(train_metrics, 'train')
-					self._ep_idx = self.buffer.add(torch.cat(self._tds))
+					self._ep_idx = self.buffer.add(torch.cat(self._tds[1:])) # type: ignore
 
 				obs = self.env.reset()
 				self._tds = [self.to_td(obs)]

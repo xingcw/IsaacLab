@@ -84,6 +84,7 @@ class Buffer():
 	def add(self, td):
 		"""Add an episode to the buffer."""
 		td['episode'] = torch.full_like(td['reward'], self._num_eps, dtype=torch.int64)
+		import pdb; pdb.set_trace()
 		if self._num_eps == 0:
 			self._buffer = self._init(td)
 		self._buffer.extend(td)
