@@ -166,6 +166,7 @@ class Episode(object):
 		self.action = torch.empty((cfg.episode_length, cfg.action_dim), dtype=torch.float32, device=self.device)
 		self.reward = torch.empty((cfg.episode_length,), dtype=torch.float32, device=self.device)
 		self.cumulative_reward = 0
+		self.metrics = torch.empty((cfg.episode_length,), dtype=torch.float32, device=self.device)
 		self.done = False
 		self._idx = 0
 	
@@ -180,11 +181,12 @@ class Episode(object):
 		self.add(*transition)
 		return self
 
-	def add(self, obs, action, reward, done):
+	def add(self, obs, action, reward, done, info):
 		self.obs[self._idx+1] = obs.clone().to(device=self.obs.device, dtype=self.obs.dtype)
 		self.action[self._idx] = action
 		self.reward[self._idx] = reward
 		self.cumulative_reward += reward
+		self.metrics[self._idx] = info["Metrics/final_distance_to_goal"]
 		self.done = done
 		self._idx += 1
 

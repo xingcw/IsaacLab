@@ -10,8 +10,22 @@ from omegaconf import OmegaConf
 from torchvision import transforms
 
 
-CONSOLE_FORMAT = [('episode', 'E', 'int'), ('env_step', 'S', 'int'), ('episode_reward', 'R', 'float'), ('total_time', 'T', 'time')]
-AGENT_METRICS = ['consistency_loss', 'reward_loss', 'value_loss', 'total_loss', 'weighted_loss', 'pi_loss', 'grad_norm']
+CONSOLE_FORMAT = [
+	('episode', 'E', 'int'), 
+	('env_step', 'S', 'int'), 
+	('episode_reward', 'R', 'float'), 
+	('total_time', 'T', 'time'), 
+	('final_distance_to_goal', 'F', 'float')
+]
+AGENT_METRICS = [
+	'consistency_loss', 
+	'reward_loss', 
+	'value_loss', 
+	'total_loss', 
+	'weighted_loss', 
+	'pi_loss', 
+	'grad_norm'
+]
 
 
 def make_dir(dir_path):
@@ -113,14 +127,14 @@ class Logger(object):
 				wandb.init(project=project,
 						entity=entity,
 						name=cfg.exp_name + f"_{self._log_dir.name}",
-						group=self._group,
-						tags=cfg_to_group(cfg, return_list=True) + [f'seed:{cfg.seed}'],
+						group=self._group, # type: ignore
+						tags=cfg_to_group(cfg, return_list=True) + [f'seed:{cfg.seed}'], # type: ignore
 						dir=self._log_dir,
-						config=OmegaConf.to_container(cfg, resolve=True))
+						config=OmegaConf.to_container(cfg, resolve=True)) # type: ignore
 				print(colored('Logs will be synced with wandb.', 'blue', attrs=['bold']))
 				self._wandb = wandb
 			except:
-				print(colored('Warning: failed to init wandb. Logs will be saved locally.', 'yellow'), attrs=['bold'])
+				print(colored('Warning: failed to init wandb. Logs will be saved locally.', 'yellow', attrs=['bold']))
 				self._wandb = None
 		self._video = VideoRecorder(log_dir, self._wandb) if self._wandb and cfg.save_video else None
 
@@ -133,7 +147,7 @@ class Logger(object):
 			fp = self._model_dir / f'model.pt'
 			torch.save(agent.state_dict(), fp)
 			if self._wandb:
-				artifact = self._wandb.Artifact(self._group + '-' + self._cfg.exp_name, type='model')
+				artifact = self._wandb.Artifact(self._group + '-' + self._cfg.exp_name, type='model') # type: ignore
 				artifact.add_file(fp)
 				self._wandb.log_artifact(artifact)
 		if self._wandb:
@@ -164,9 +178,9 @@ class Logger(object):
 			for k,v in d.items():
 				self._wandb.log({category + '/' + k: v}, step=d['env_step'])
 		if category == 'eval':
-			keys = ['env_step', 'episode_reward', 'episode_reward_std']
-			self._eval.append(np.array([d[keys[0]], d[keys[1]], d[keys[2]]]))
-			pd.DataFrame(np.array(self._eval)).to_csv(self._log_dir / 'eval.log', header=keys, index=None)
+			keys = ['env_step', 'episode_reward', 'episode_reward_std', 'final_distance_to_goal']
+			self._eval.append(np.array([d[keys[0]], d[keys[1]], d[keys[2]], d[keys[3]]]))
+			pd.DataFrame(np.array(self._eval)).to_csv(self._log_dir / 'eval.log', header=keys, index=None) # type: ignore
 		self._print(d, category)
 
 		if self._save_model and agent is not None:
@@ -174,6 +188,6 @@ class Logger(object):
 			fp = self._model_dir / f'model_{step:06d}.pt'
 			torch.save(agent.state_dict(), fp)
 			if self._wandb:
-				artifact = self._wandb.Artifact(self._group + '-' + self._cfg.exp_name, type='model')
+				artifact = self._wandb.Artifact(self._group + '-' + self._cfg.exp_name, type='model') # type: ignore
 				artifact.add_file(fp)
-				self._wandb.log_artifact(artifact)
+				self._wandb.log_artifact(artifact) # type: ignore

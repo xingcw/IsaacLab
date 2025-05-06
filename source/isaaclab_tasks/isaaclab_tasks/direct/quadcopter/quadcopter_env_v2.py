@@ -243,14 +243,14 @@ class QuadcopterEnv(DirectRLEnv):
         self._episode_sums = {
             key: torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
             for key in [
-                "lin_vel",
-                "ang_vel",
-                "approaching_goal",
-                "convergence_goal",
-                "yaw",
-                "cmd_smoothness",
-                "cmd_body_rates",
-                "new_goal",
+                "distance_to_goal",
+                "lin_vel_reward",
+                "lin_vel_penalty",
+                "hover_reward",
+                "alignment_reward",
+                "smoothness",
+                "height_reward",
+                "low_alt_penalty"
             ]
         }
 
@@ -377,14 +377,20 @@ class QuadcopterEnv(DirectRLEnv):
         goal_dir = torch.nn.functional.normalize(self._desired_pos_w - pos, dim=1)
         align_reward = 0.5 * torch.sum(vel * goal_dir, dim=1)
 
-        reward = (
-            -1.0 * dist
-            +0.5 * torch.tanh(2 * speed)
-            +vel_pen + hover_bonus 
-            + 0.1 * align_reward
-            -0.05 * smooth
-            +z_bonus + low_alt_penalty
-        )
+        rewards = {
+            "distance_to_goal": -1.0 * dist,
+            "lin_vel_reward": 0.5 * torch.tanh(2 * speed),
+            "lin_vel_penalty": vel_pen,
+            "hover_reward": hover_bonus,
+            "alignment_reward": 0.1 * align_reward,
+            "smoothness": -0.05 * smooth,
+            "height_reward": z_bonus,
+            "low_alt_penalty": low_alt_penalty,
+        }
+        reward = torch.sum(torch.stack(list(rewards.values())), dim=0)
+        # Logging
+        for key, value in rewards.items():
+            self._episode_sums[key] += value
         return reward
 
     

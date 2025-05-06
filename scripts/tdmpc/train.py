@@ -90,7 +90,7 @@ class EnvWrapper(gym.Env):
 		action = action.unsqueeze(0)
 		obs, reward, terminated, time_outs, info = self.env.step(action)
 		done = self.t >= self.max_episode_length or time_outs
-		return obs['policy'].squeeze(0), reward.item(), done, info # type: ignore
+		return obs['policy'].squeeze(0), reward.item(), done, info['log'] # type: ignore
 	
 	def __str__(self):
 		return f"<{type(self).__name__}{self.env}>"
@@ -159,21 +159,23 @@ def set_seed(seed):
 def evaluate(env, agent, num_episodes, step, env_step, video):
 	"""Evaluate a trained agent and optionally save a video."""
 	episode_rewards = []
+	metrics = []
 	for i in range(num_episodes):
 		obs, done, ep_reward, t = env.reset(), False, 0, 0
 		if video: 
 			video.init(env, enabled=(i==0))
 		while not done:
 			action = agent.plan(obs, eval_mode=True, step=step, t0=t==0)
-			obs, reward, done, _ = env.step(action)
+			obs, reward, done, info = env.step(action)
 			ep_reward += reward
 			if video: 
 				video.record(env)
 			t += 1
+		metrics.append(info["Metrics/final_distance_to_goal"])
 		episode_rewards.append(ep_reward)
 		if video: 
 			video.save(env_step)
-	return np.nanmean(episode_rewards), np.nanstd(episode_rewards)
+	return np.nanmean(episode_rewards), np.nanstd(episode_rewards), np.nanmean(metrics)
 
 
 @hydra_task_config(args_cli.task, "tdmpc_cfg_entry_point")
@@ -257,8 +259,10 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 	if args_cli.eval_only:
 		# Run evaluation only
 		print("Running evaluation only mode...")
-		reward_mean, reward_std = evaluate(env, agent, agent_cfg.eval_episodes, step=0, env_step=0, video=L.video)
+		reward_mean, reward_std, final_distance_to_goal = \
+			evaluate(env, agent, agent_cfg.eval_episodes, step=0, env_step=0, video=L.video)
 		print(f"Evaluation reward: {reward_mean:.2f} ± {reward_std:.2f}")
+		print(f"Evaluation final distance to goal: {final_distance_to_goal:.2f}")
 	else:		
 		for step in range(0, agent_cfg.train_steps + agent_cfg.episode_length, agent_cfg.episode_length):
 			# Collect trajectory
@@ -266,8 +270,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 			episode = Episode(agent_cfg, obs)
 			while not episode.done:
 				action = agent.plan(obs, step=step, t0=episode.first)
-				obs, reward, done, _ = env.step(action) # type: ignore
-				episode += (obs, action, reward, done)
+				obs, reward, done, info = env.step(action) # type: ignore
+				episode += (obs, action, reward, done, info)
 			assert len(episode) == agent_cfg.episode_length
 			buffer += episode
 
@@ -287,15 +291,19 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 				'step': step,
 				'env_step': env_step,
 				'total_time': time.time() - start_time,
-				'episode_reward': episode.cumulative_reward
+				'episode_reward': episode.cumulative_reward,
+				'final_distance_to_goal': episode.metrics.mean().item()
 			}
 			train_metrics.update(common_metrics)
 			L.log(train_metrics, category='train')
 			
 			# Evaluate agent periodically
 			if env_step % agent_cfg.eval_freq == 0:
-				common_metrics['episode_reward'], common_metrics['episode_reward_std'] = \
+				reward_mean, reward_std, final_distance_to_goal = \
 					evaluate(env, agent, agent_cfg.eval_episodes, step, env_step, L.video)
+				common_metrics['episode_reward'] = reward_mean
+				common_metrics['episode_reward_std'] = reward_std
+				common_metrics['final_distance_to_goal'] = final_distance_to_goal
 				L.log(common_metrics, category='eval', agent=agent)
 
 		L.finish(agent)
