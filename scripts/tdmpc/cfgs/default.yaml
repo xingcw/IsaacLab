@@ -41,9 +41,9 @@ mlp_dim: 512
 latent_dim: 50
 
 # wandb (insert your own)
-use_wandb: false
-wandb_project: none
-wandb_entity: none
+use_wandb: true
+wandb_project: isaaclab
+wandb_entity: chxing-university-of-pennsylvania
 
 # misc
 seed: 1

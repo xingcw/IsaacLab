@@ -15,10 +15,10 @@ from isaaclab.app import AppLauncher
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Train an RL agent with TD-MPC.")
 parser.add_argument("--video", "-v", action="store_true", default=False, help="Save videos during training.")
-parser.add_argument("--num_envs", "-ne", type=int, default=None, help="Number of environments to simulate.")
-parser.add_argument("--task", "-t", type=str, default=None, help="Name of the task.")
+parser.add_argument("--num_envs", "-ne", type=int, default=1, help="Number of environments to simulate.")
+parser.add_argument("--task", "-t", type=str, default="Isaac-Quadcopter-Direct-v1", help="Name of the task.")
 parser.add_argument("--seed", "-s", type=int, default=None, help="Seed used for the environment")
-parser.add_argument("--exp_name", "-en", type=str, default=None, help="Name of the experiment.")
+parser.add_argument("--exp_name", "-en", type=str, default="default", help="Name of the experiment.")
 parser.add_argument("--use_wandb", "-uw", action="store_true", default=False, help="Use wandb for logging.")
 parser.add_argument("--save_model", "-sm", action="store_true", default=False, help="Save model.")
 parser.add_argument("--update_multiplier", "-um", type=float, default=1.0, help="Update multiplier.")
@@ -26,8 +26,6 @@ parser.add_argument("--finetune_dynamics", "-fd", action="store_true", default=F
 parser.add_argument("--ckpt_path", "-cp", type=str, default=None, help="Path to the checkpoint file.")
 parser.add_argument("--eval_only", action="store_true", help="Only run evaluation using the loaded model.")
 parser.add_argument("--follow_robot", type=int, default=1, help="Which environment index to follow in viewer.")
-
-
 
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -226,8 +224,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
 	# setup wandb
 	agent_cfg.use_wandb = args_cli.use_wandb
-	agent_cfg.wandb_project = "isaaclab"
-	agent_cfg.wandb_entity = "ftesshu2273-university-of-pennsylvania"
+	# agent_cfg.wandb_project = "isaaclab"
+	# agent_cfg.wandb_entity = "chxing-university-of-pennsylvania"
 	
 	# setup video recording
 	agent_cfg.save_video = args_cli.video

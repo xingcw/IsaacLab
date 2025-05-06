@@ -42,8 +42,8 @@ latent_dim: 50
 
 # wandb (insert your own)
 use_wandb: false
-wandb_project: none
-wandb_entity: none
+wandb_project: finetune-world-models
+wandb_entity: chxing-university-of-pennsylvania
 
 # misc
 seed: 1
