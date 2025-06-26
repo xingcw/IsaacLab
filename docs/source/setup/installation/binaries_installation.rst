@@ -203,7 +203,7 @@ Clone the Isaac Lab repository into your workspace:
 
             ./isaaclab.sh --help
 
-            usage: isaaclab.sh [-h] [-i] [-f] [-p] [-s] [-t] [-o] [-v] [-d] [-c] -- Utility to manage Isaac Lab.
+            usage: isaaclab.sh [-h] [-i] [-f] [-p] [-s] [-t] [-o] [-v] [-d] [-n] [-c] -- Utility to manage Isaac Lab.
 
             optional arguments:
                -h, --help           Display the help content.
@@ -211,10 +211,11 @@ Clone the Isaac Lab repository into your workspace:
                -f, --format         Run pre-commit to format the code and check lints.
                -p, --python         Run the python executable provided by Isaac Sim or virtual environment (if active).
                -s, --sim            Run the simulator executable (isaac-sim.sh) provided by Isaac Sim.
-               -t, --test           Run all python unittest tests.
+               -t, --test           Run all python pytest tests.
                -o, --docker         Run the docker container helper script (docker/container.sh).
                -v, --vscode         Generate the VSCode settings file from template.
                -d, --docs           Build the documentation from source using sphinx.
+               -n, --new            Create a new external project or internal task from template.
                -c, --conda [NAME]   Create the conda environment for Isaac Lab. Default name is 'env_isaaclab'.
 
       .. tab-item:: :icon:`fa-brands fa-windows` Windows
@@ -224,7 +225,7 @@ Clone the Isaac Lab repository into your workspace:
 
             isaaclab.bat --help
 
-            usage: isaaclab.bat [-h] [-i] [-f] [-p] [-s] [-v] [-d] [-c] -- Utility to manage Isaac Lab.
+            usage: isaaclab.bat [-h] [-i] [-f] [-p] [-s] [-v] [-d] [-n] [-c] -- Utility to manage Isaac Lab.
 
             optional arguments:
                -h, --help           Display the help content.
@@ -232,9 +233,10 @@ Clone the Isaac Lab repository into your workspace:
                -f, --format         Run pre-commit to format the code and check lints.
                -p, --python         Run the python executable provided by Isaac Sim or virtual environment (if active).
                -s, --sim            Run the simulator executable (isaac-sim.bat) provided by Isaac Sim.
-               -t, --test           Run all python unittest tests.
+               -t, --test           Run all python pytest tests.
                -v, --vscode         Generate the VSCode settings file from template.
                -d, --docs           Build the documentation from source using sphinx.
+               -n, --new            Create a new external project or internal task from template.
                -c, --conda [NAME]   Create the conda environment for Isaac Lab. Default name is 'env_isaaclab'.
 
 
@@ -393,14 +395,14 @@ Installation
 
          .. code:: bash
 
-            ./isaaclab.sh -p -m pip install --upgrade --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128
+            ./isaaclab.sh -p -m pip install --upgrade --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128
 
       .. tab-item:: :icon:`fa-brands fa-windows` Windows
          :sync: windows
 
          .. code:: batch
 
-            isaaclab.bat -p -m pip install --upgrade --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128
+            isaaclab.bat -p -m pip install --upgrade --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128
 
 Verifying the Isaac Lab installation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -448,6 +450,10 @@ On Windows machines, please terminate the process from Command Prompt using
 
 
 If you see this, then the installation was successful! |:tada:|
+
+If you see an error ``ModuleNotFoundError: No module named 'isaacsim'``, ensure that the conda environment is activated
+and ``source _isaac_sim/setup_conda_env.sh`` has been executed.
+
 
 Train a robot!
 ~~~~~~~~~~~~~~~

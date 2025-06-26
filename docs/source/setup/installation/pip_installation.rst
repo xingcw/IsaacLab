@@ -84,13 +84,13 @@ If you encounter any issues, please report them to the
 
          .. code-block:: bash
 
-            pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu118
+            pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu118
 
       .. tab-item:: CUDA 12
 
          .. code-block:: bash
 
-            pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu121
+            pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu121
 
 -  Before installing Isaac Sim, ensure the latest pip version is installed. To update pip, run
 
@@ -211,7 +211,7 @@ Clone the Isaac Lab repository into your workspace:
 
             ./isaaclab.sh --help
 
-            usage: isaaclab.sh [-h] [-i] [-f] [-p] [-s] [-t] [-o] [-v] [-d] [-c] -- Utility to manage Isaac Lab.
+            usage: isaaclab.sh [-h] [-i] [-f] [-p] [-s] [-t] [-o] [-v] [-d] [-n] [-c] -- Utility to manage Isaac Lab.
 
             optional arguments:
                -h, --help           Display the help content.
@@ -219,10 +219,11 @@ Clone the Isaac Lab repository into your workspace:
                -f, --format         Run pre-commit to format the code and check lints.
                -p, --python         Run the python executable provided by Isaac Sim or virtual environment (if active).
                -s, --sim            Run the simulator executable (isaac-sim.sh) provided by Isaac Sim.
-               -t, --test           Run all python unittest tests.
+               -t, --test           Run all python pytest tests.
                -o, --docker         Run the docker container helper script (docker/container.sh).
                -v, --vscode         Generate the VSCode settings file from template.
                -d, --docs           Build the documentation from source using sphinx.
+               -n, --new            Create a new external project or internal task from template.
                -c, --conda [NAME]   Create the conda environment for Isaac Lab. Default name is 'env_isaaclab'.
 
       .. tab-item:: :icon:`fa-brands fa-windows` Windows
@@ -232,7 +233,7 @@ Clone the Isaac Lab repository into your workspace:
 
             isaaclab.bat --help
 
-            usage: isaaclab.bat [-h] [-i] [-f] [-p] [-s] [-v] [-d] [-c] -- Utility to manage Isaac Lab.
+            usage: isaaclab.bat [-h] [-i] [-f] [-p] [-s] [-v] [-d] [-n] [-c] -- Utility to manage Isaac Lab.
 
             optional arguments:
                -h, --help           Display the help content.
@@ -240,9 +241,10 @@ Clone the Isaac Lab repository into your workspace:
                -f, --format         Run pre-commit to format the code and check lints.
                -p, --python         Run the python executable provided by Isaac Sim or virtual environment (if active).
                -s, --sim            Run the simulator executable (isaac-sim.bat) provided by Isaac Sim.
-               -t, --test           Run all python unittest tests.
+               -t, --test           Run all python pytest tests.
                -v, --vscode         Generate the VSCode settings file from template.
                -d, --docs           Build the documentation from source using sphinx.
+               -n, --new            Create a new external project or internal task from template.
                -c, --conda [NAME]   Create the conda environment for Isaac Lab. Default name is 'env_isaaclab'.
 
 Installation
@@ -304,7 +306,7 @@ Installation
 
    .. code:: bash
 
-      pip install --upgrade --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128
+      pip install --upgrade --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128
 
 Verifying the Isaac Lab installation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
